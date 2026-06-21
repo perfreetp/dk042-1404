@@ -5,7 +5,7 @@ export interface Driver {
   cardNumber: string;
   busPlate: string;
   route: string;
-  status: 'waiting' | 'testing' | 'passed' | 'failed';
+  status: 'waiting' | 'testing' | 'passed' | 'failed' | 'suspended';
   queuePosition: number;
 }
 
@@ -20,6 +20,8 @@ export interface TestRecord {
   alcoholLevel?: number;
   passCode?: string;
   released: boolean;
+  releasedAt?: number;
+  reviewConclusion?: 'cleared' | 'suspended';
 }
 
 export type TestStep = 'idle' | 'blow' | 'waiting' | 'result';
@@ -27,9 +29,13 @@ export type TestStep = 'idle' | 'blow' | 'waiting' | 'result';
 export type CardScanResult =
   | { type: 'success'; driver: Driver }
   | { type: 'not_found'; cardNumber: string }
-  | { type: 'already_tested'; driver: Driver };
+  | { type: 'already_passed'; driver: Driver; passCode?: string }
+  | { type: 'failed_pending'; driver: Driver }
+  | { type: 'suspended'; driver: Driver }
+  | { type: 'testing'; driver: Driver };
 
 export type AlertStatus = 'pending' | 'contacted' | 'reviewed';
+export type ReviewConclusion = 'cleared' | 'suspended';
 
 export interface AlertRecord {
   id: string;
@@ -41,7 +47,10 @@ export interface AlertRecord {
   alcoholLevel: number;
   status: AlertStatus;
   contactedAt?: number;
+  contactNote?: string;
   reviewedAt?: number;
+  reviewConclusion?: ReviewConclusion;
+  reviewNote?: string;
 }
 
 export interface AppState {
@@ -56,7 +65,7 @@ export interface AppState {
 }
 
 export interface AppActions {
-  selectDriver: (driverId: string) => void;
+  selectDriver: (driverId: string) => { ok: boolean; reason?: string };
   selectDriverByCard: (cardNumber: string) => CardScanResult;
   startTest: () => void;
   setTestStep: (step: TestStep) => void;
@@ -64,7 +73,9 @@ export interface AppActions {
   resetTest: () => void;
   confirmRelease: () => void;
   resetDriverStatus: (driverId: string) => void;
-  updateAlertStatus: (alertId: string, status: AlertStatus) => void;
+  updateAlertContact: (alertId: string, note: string) => void;
+  updateAlertReview: (alertId: string, conclusion: ReviewConclusion, note: string) => void;
   verifyPassCode: (code: string) => { valid: boolean; record?: TestRecord; alreadyReleased: boolean };
   markRecordReleased: (recordId: string) => void;
+  exportTodayLedger: () => string;
 }

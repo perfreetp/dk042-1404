@@ -5,25 +5,48 @@ import { DriverGrid } from '../components/DriverGrid';
 import { CardReader } from '../components/CardReader';
 import { SecuritySidebar } from '../components/SecuritySidebar';
 import { SupervisorPanel } from '../components/SupervisorPanel';
+import { DailySummary } from '../components/DailySummary';
 import { TestProcess } from '../components/TestProcess';
 import { ResultPass } from '../components/ResultPass';
 import { ResultFail } from '../components/ResultFail';
-import { Play, X, Shield, AlertTriangle } from 'lucide-react';
+import { Play, X, Shield, AlertTriangle, CheckCircle, Clock, BarChart3 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import type { Driver } from '../types';
 
-type PageState = 'home' | 'confirm' | 'testing' | 'result';
+type PageState = 'home' | 'confirm' | 'testing' | 'result' | 'daily';
 type SidebarMode = 'security' | 'supervisor';
 
 export const Home = () => {
-  const { currentDriver, testResult, selectDriver, resetTest, alerts } = useAppStore();
+  const { currentDriver, testResult, selectDriver, resetTest, alerts, records, selectDriverByCard } = useAppStore();
   const { speak } = useSpeech();
   const [pageState, setPageState] = useState<PageState>('home');
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('security');
+  const [driverBanner, setDriverBanner] = useState<{
+    type: 'passed' | 'failed' | 'testing' | 'suspended';
+    driver: Driver;
+    passCode?: string;
+  } | null>(null);
 
   const pendingAlerts = alerts.filter(a => a.status === 'pending').length;
 
   const handleSelectDriver = (driverId: string) => {
-    selectDriver(driverId);
+    setPageState('confirm');
+  };
+
+  const handleAlreadyTested = (type: 'passed' | 'failed' | 'testing' | 'suspended', driver: Driver) => {
+    let passCode: string | undefined;
+    if (type === 'passed') {
+      const latestRecord = [...records]
+        .filter(r => r.driverId === driver.id)
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+      passCode = latestRecord?.passCode;
+    }
+    setDriverBanner({ type, driver, passCode });
+    setTimeout(() => setDriverBanner(null), 6000);
+  };
+
+  const handleCardSuccess = () => {
+    setDriverBanner(null);
     setPageState('confirm');
   };
 
@@ -54,14 +77,81 @@ export const Home = () => {
     return sidebarMode === 'security' ? <SecuritySidebar /> : <SupervisorPanel />;
   };
 
+  const renderDriverBanner = () => {
+    if (!driverBanner) return null;
+    const { type, driver, passCode } = driverBanner;
+
+    const configs = {
+      passed: {
+        bg: 'bg-green-50 border-green-300',
+        text: 'text-green-700',
+        icon: CheckCircle,
+        iconColor: 'text-green-500',
+        title: `${driver.name}师傅今日已通过检测`,
+        subtitle: passCode ? `放行码：${passCode}，可直接核验放行` : '可直接核验放行',
+      },
+      failed: {
+        bg: 'bg-orange-50 border-orange-300',
+        text: 'text-orange-700',
+        icon: AlertTriangle,
+        iconColor: 'text-orange-500',
+        title: `${driver.name}师傅待主管复核`,
+        subtitle: '酒测不合格，请勿放行，等待主管复核结论',
+      },
+      suspended: {
+        bg: 'bg-red-50 border-red-400',
+        text: 'text-red-800',
+        icon: Shield,
+        iconColor: 'text-red-600',
+        title: `${driver.name}师傅被禁止上岗`,
+        subtitle: '主管已标记禁止上岗，请立即拦停该车',
+      },
+      testing: {
+        bg: 'bg-blue-50 border-blue-300',
+        text: 'text-blue-700',
+        icon: Clock,
+        iconColor: 'text-blue-500',
+        title: `${driver.name}师傅正在检测中`,
+        subtitle: '请等待检测完成，无需重复操作',
+      },
+    } as const;
+
+    const cfg = configs[type];
+    const Icon = cfg.icon;
+
+    return (
+      <div className={cn('p-6 mx-8 -mt-2 mb-4 rounded-2xl border-2', cfg.bg, type === 'suspended' && 'animate-pulse')}>
+        <div className="flex items-center gap-5">
+          <Icon className={cn('w-16 h-16 flex-shrink-0', cfg.iconColor)} />
+          <div className="flex-1">
+            <p className={cn('text-3xl font-bold mb-1', cfg.text)}>{cfg.title}</p>
+            <p className={cn('text-xl opacity-90', cfg.text)}>{cfg.subtitle}</p>
+            {type === 'passed' && passCode && (
+              <p className="mt-2 text-2xl font-mono font-bold text-green-700">放行码：{passCode}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderContent = () => {
+    if (pageState === 'daily') {
+      return (
+        <div className="flex flex-1">
+          <DailySummary onBack={() => setPageState('home')} />
+        </div>
+      );
+    }
+
     if (pageState === 'home') {
       return (
         <div className="flex flex-1">
           <div className="flex-1 flex flex-col">
-            <DriverGrid onSelectDriver={handleSelectDriver} />
+            {renderDriverBanner()}
+            <DriverGrid onSelectDriver={handleSelectDriver} onAlreadyTested={handleAlreadyTested} />
             <div className="p-8 pt-0">
-              <CardReader onCardSuccess={() => setPageState('confirm')} />
+              <CardReader onCardSuccess={handleCardSuccess} />
             </div>
           </div>
           {renderSidebar()}
@@ -160,6 +250,19 @@ export const Home = () => {
             </div>
           </div>
           <div className="flex items-center gap-6">
+            <button
+              onClick={() => setPageState(pageState === 'daily' ? 'home' : 'daily')}
+              className={cn(
+                'flex items-center gap-2 px-5 py-3 rounded-xl text-lg font-bold transition-all',
+                pageState === 'daily'
+                  ? 'bg-white text-blue-600 shadow-lg'
+                  : 'bg-blue-500 text-white hover:bg-blue-400'
+              )}
+            >
+              <BarChart3 className="w-6 h-6" />
+              日终汇总
+            </button>
+
             <div className="flex bg-blue-500 rounded-xl p-1">
               <button
                 onClick={() => setSidebarMode('security')}
@@ -206,7 +309,7 @@ export const Home = () => {
 
       <footer className="bg-gray-100 border-t-2 border-gray-200 px-12 py-4">
         <div className="flex items-center justify-between text-lg text-gray-500">
-          <p>© 2024 校车安全管理系统 · 版本 v2.0.0</p>
+          <p>© 2024 校车安全管理系统 · 版本 v2.1.0</p>
           <div className="flex items-center gap-6">
             <span className="flex items-center gap-2">
               <span className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Clock, CheckCircle, AlertTriangle, RefreshCw, Search, ShieldCheck, KeyRound } from 'lucide-react';
+import { Users, Clock, CheckCircle, AlertTriangle, RefreshCw, Search, ShieldCheck, KeyRound, Shield } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { formatTime } from '../utils/formatTime';
 import { cn } from '../lib/utils';
@@ -8,7 +8,7 @@ import { PassCodeVerify } from './PassCodeVerify';
 type SidebarTab = 'queue' | 'ledger' | 'verify';
 
 export const SecuritySidebar = () => {
-  const { drivers, records, alerts, resetDriverStatus, updateAlertStatus } = useAppStore();
+  const { drivers, records, alerts, resetDriverStatus } = useAppStore();
   const [activeTab, setActiveTab] = useState<SidebarTab>('queue');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -22,10 +22,12 @@ export const SecuritySidebar = () => {
 
   const passedToday = todayRecords.filter(r => r.result === 'passed').length;
   const failedToday = todayRecords.filter(r => r.result === 'failed').length;
+  const suspendedCount = drivers.filter(d => d.status === 'suspended').length;
   const pendingAlerts = alerts.filter(a => a.status === 'pending').length;
 
   const nextDriver = waitingDrivers[0];
   const testingDriver = drivers.find(d => d.status === 'testing');
+  const suspendedDrivers = drivers.filter(d => d.status === 'suspended');
 
   const filteredRecords = searchQuery.trim()
     ? todayRecords.filter(r =>
@@ -41,8 +43,31 @@ export const SecuritySidebar = () => {
     { key: 'verify', label: '核验', icon: KeyRound, badge: pendingAlerts || undefined },
   ];
 
+  const getRecordBadge = (record: typeof todayRecords[number]) => {
+    const driver = drivers.find(d => d.id === record.driverId);
+    const relatedAlert = alerts.find(a => a.driverId === record.driverId && record.result === 'failed');
+
+    if (driver?.status === 'suspended') {
+      return { text: '禁止放行', bg: 'bg-red-100 border-red-300', textColor: 'text-red-700', icon: Shield, pulse: true };
+    }
+    if (record.result === 'passed') {
+      if (record.released) return { text: '已放行', bg: 'bg-green-100 border-green-200', textColor: 'text-green-700', icon: CheckCircle, pulse: false };
+      return { text: '待放行', bg: 'bg-blue-100 border-blue-200', textColor: 'text-blue-700', icon: Clock, pulse: false };
+    }
+    if (relatedAlert) {
+      if (relatedAlert.status === 'reviewed' && relatedAlert.reviewConclusion === 'cleared')
+        return { text: '复核通过', bg: 'bg-green-100 border-green-200', textColor: 'text-green-700', icon: CheckCircle, pulse: false };
+      if (relatedAlert.status === 'reviewed' && relatedAlert.reviewConclusion === 'suspended')
+        return { text: '禁止放行', bg: 'bg-red-100 border-red-300', textColor: 'text-red-700', icon: Shield, pulse: true };
+      if (relatedAlert.status === 'contacted')
+        return { text: '已联系', bg: 'bg-yellow-100 border-yellow-200', textColor: 'text-yellow-700', icon: Users, pulse: false };
+      return { text: '待处理', bg: 'bg-orange-100 border-orange-200', textColor: 'text-orange-700', icon: AlertTriangle, pulse: true };
+    }
+    return { text: '待复核', bg: 'bg-orange-100 border-orange-200', textColor: 'text-orange-700', icon: AlertTriangle, pulse: false };
+  };
+
   return (
-    <div className="w-[420px] bg-white border-l-2 border-gray-200 flex flex-col overflow-hidden">
+    <div className="w-[440px] bg-white border-l-2 border-gray-200 flex flex-col overflow-hidden">
       <div className="p-5 border-b border-gray-100">
         <h2 className="text-2xl font-bold text-gray-800 mb-1">保安管理台</h2>
         <p className="text-base text-gray-500">{new Date().toLocaleDateString('zh-CN')}</p>
@@ -61,22 +86,41 @@ export const SecuritySidebar = () => {
         </div>
         <div className={cn(
           "rounded-xl p-3 text-center",
-          pendingAlerts > 0 ? "bg-orange-50" : "bg-gray-50"
+          pendingAlerts > 0 || suspendedCount > 0 ? "bg-orange-50" : "bg-gray-50"
         )}>
           <AlertTriangle className={cn(
             "w-7 h-7 mx-auto mb-1",
-            pendingAlerts > 0 ? "text-orange-500" : "text-gray-400"
+            pendingAlerts > 0 || suspendedCount > 0 ? "text-orange-500" : "text-gray-400"
           )} />
           <p className={cn(
             "text-2xl font-bold",
-            pendingAlerts > 0 ? "text-orange-600" : "text-gray-500"
-          )}>{failedToday}</p>
+            pendingAlerts > 0 || suspendedCount > 0 ? "text-orange-600" : "text-gray-500"
+          )}>{failedToday + suspendedCount}</p>
           <p className={cn(
             "text-sm",
-            pendingAlerts > 0 ? "text-orange-700" : "text-gray-500"
-          )}>待复核</p>
+            pendingAlerts > 0 || suspendedCount > 0 ? "text-orange-700" : "text-gray-500"
+          )}>待复核/禁岗</p>
         </div>
       </div>
+
+      {suspendedDrivers.length > 0 && (
+        <div className="mx-5 mb-3 bg-red-50 rounded-xl p-3 border-2 border-red-300">
+          <div className="flex items-center gap-3 mb-2">
+            <Shield className="w-6 h-6 text-red-600 animate-pulse" />
+            <span className="text-lg font-bold text-red-700">禁止上岗</span>
+          </div>
+          <div className="space-y-1.5">
+            {suspendedDrivers.map(d => (
+              <div key={d.id} className="flex items-center gap-2 text-sm">
+                <img src={d.avatar} alt={d.name} className="w-7 h-7 rounded-full bg-white" />
+                <span className="font-bold text-red-800">{d.name}</span>
+                <span className="text-red-600">· {d.busPlate}</span>
+                <span className="text-red-500">· {d.route}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {testingDriver && (
         <div className="mx-5 mb-3 bg-blue-100 rounded-xl p-3 border-2 border-blue-300">
@@ -186,12 +230,13 @@ export const SecuritySidebar = () => {
             ) : (
               <div className="space-y-2">
                 {filteredRecords.slice().reverse().map(record => {
-                  const relatedAlert = alerts.find(a => a.driverId === record.driverId && record.result === 'failed');
+                  const badge = getRecordBadge(record);
+                  const BadgeIcon = badge.icon;
                   return (
                     <div
                       key={record.id}
                       className={cn(
-                        'p-3 rounded-xl border',
+                        'p-3 rounded-xl border-2',
                         record.result === 'passed' ? 'bg-green-50 border-green-100' : 'bg-orange-50 border-orange-100'
                       )}
                     >
@@ -205,31 +250,17 @@ export const SecuritySidebar = () => {
                           <span className="font-bold text-gray-800">{record.driverName}</span>
                         </div>
                         <span className={cn(
-                          'text-sm font-bold px-2 py-0.5 rounded-full',
-                          record.result === 'passed'
-                            ? record.released
-                              ? 'bg-green-200 text-green-800'
-                              : 'bg-blue-100 text-blue-700'
-                            : relatedAlert
-                              ? relatedAlert.status === 'reviewed'
-                                ? 'bg-green-200 text-green-800'
-                                : relatedAlert.status === 'contacted'
-                                ? 'bg-yellow-100 text-yellow-700'
-                                : 'bg-orange-200 text-orange-700'
-                              : 'bg-orange-200 text-orange-700'
+                          'flex items-center gap-1 text-sm font-bold px-2.5 py-0.5 rounded-lg border',
+                          badge.bg,
+                          badge.textColor,
+                          badge.pulse && 'animate-pulse'
                         )}>
-                          {record.result === 'passed'
-                            ? record.released ? '已放行' : '待放行'
-                            : relatedAlert
-                              ? relatedAlert.status === 'reviewed' ? '已复核'
-                                : relatedAlert.status === 'contacted' ? '已联系'
-                                : '待处理'
-                              : '待复核'
-                          }
+                          <BadgeIcon className="w-3.5 h-3.5" />
+                          {badge.text}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-sm text-gray-500">
-                        <span>{record.busPlate}</span>
+                        <span>{record.busPlate} · {record.route}</span>
                         <span>{formatTime(record.timestamp)}</span>
                       </div>
                       {record.passCode && (
@@ -238,7 +269,7 @@ export const SecuritySidebar = () => {
                           <span className="font-mono font-bold text-blue-600">{record.passCode}</span>
                         </div>
                       )}
-                      {record.result === 'failed' && (
+                      {record.result === 'failed' && drivers.find(d => d.id === record.driverId)?.status !== 'suspended' && (
                         <button
                           onClick={() => resetDriverStatus(record.driverId)}
                           className="mt-2 flex items-center gap-1 text-sm text-gray-500 hover:text-blue-600 transition-colors"

@@ -1,18 +1,21 @@
 import { useState } from 'react';
-import { Shield, Phone, CheckCircle, Clock, AlertTriangle, Eye } from 'lucide-react';
+import { Shield, Phone, CheckCircle, Clock, AlertTriangle, Eye, XCircle, Send } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useSpeech } from '../hooks/useSpeech';
 import { formatTime } from '../utils/formatTime';
 import { cn } from '../lib/utils';
-import type { AlertRecord, AlertStatus } from '../types';
+import type { AlertRecord, AlertStatus, ReviewConclusion } from '../types';
 
 type AlertFilter = 'all' | 'pending' | 'contacted' | 'reviewed';
 
 export const SupervisorPanel = () => {
-  const { alerts, updateAlertStatus } = useAppStore();
+  const { alerts, updateAlertContact, updateAlertReview } = useAppStore();
   const { speak } = useSpeech();
   const [filter, setFilter] = useState<AlertFilter>('all');
   const [selectedAlert, setSelectedAlert] = useState<AlertRecord | null>(null);
+  const [contactNote, setContactNote] = useState('');
+  const [reviewConclusion, setReviewConclusion] = useState<ReviewConclusion>('cleared');
+  const [reviewNote, setReviewNote] = useState('');
 
   const pendingCount = alerts.filter(a => a.status === 'pending').length;
   const contactedCount = alerts.filter(a => a.status === 'contacted').length;
@@ -22,27 +25,63 @@ export const SupervisorPanel = () => {
     ? alerts
     : alerts.filter(a => a.status === filter);
 
-  const handleStatusChange = (alertId: string, newStatus: AlertStatus) => {
-    updateAlertStatus(alertId, newStatus);
-    const labels: Record<AlertStatus, string> = {
-      pending: '标记为待处理',
-      contacted: '标记为已联系',
-      reviewed: '标记为已复核',
-    };
-    speak(labels[newStatus]);
-    if (selectedAlert?.id === alertId) {
-      setSelectedAlert(null);
-    }
-  };
-
   const statusConfig: Record<AlertStatus, { bg: string; text: string; icon: typeof AlertTriangle; label: string }> = {
     pending: { bg: 'bg-orange-100 border-orange-300', text: 'text-orange-700', icon: AlertTriangle, label: '待处理' },
     contacted: { bg: 'bg-yellow-100 border-yellow-300', text: 'text-yellow-700', icon: Phone, label: '已联系' },
     reviewed: { bg: 'bg-green-100 border-green-300', text: 'text-green-700', icon: CheckCircle, label: '已复核' },
   };
 
+  const conclusionConfig: Record<ReviewConclusion, { text: string; icon: typeof CheckCircle; color: string; bg: string }> = {
+    cleared: { text: '复核通过', icon: CheckCircle, color: 'text-green-700', bg: 'bg-green-100 border-green-300' },
+    suspended: { text: '禁止上岗', icon: XCircle, color: 'text-red-700', bg: 'bg-red-100 border-red-300' },
+  };
+
+  const handleSetExpanded = (alert: AlertRecord | null) => {
+    setSelectedAlert(alert);
+    if (alert) {
+      setContactNote(alert.contactNote || '');
+      setReviewConclusion(alert.reviewConclusion || 'cleared');
+      setReviewNote(alert.reviewNote || '');
+    }
+  };
+
+  const handleMarkContacted = (alertId: string) => {
+    if (!contactNote.trim()) {
+      speak('请先填写联系备注');
+      return;
+    }
+    updateAlertContact(alertId, contactNote.trim());
+    speak('已记录联系信息，等待复核结论');
+    const updated = alerts.find(a => a.id === alertId);
+    if (updated) {
+      handleSetExpanded({ ...updated, status: 'contacted', contactNote: contactNote.trim() });
+    }
+  };
+
+  const handleMarkReviewed = (alertId: string) => {
+    if (!reviewNote.trim()) {
+      speak('请先填写复核备注');
+      return;
+    }
+    updateAlertReview(alertId, reviewConclusion, reviewNote.trim());
+    speak(
+      reviewConclusion === 'cleared'
+        ? '复核通过，已同步保安台允许放行'
+        : '已禁止上岗，已同步保安台拦停该车'
+    );
+    const updated = alerts.find(a => a.id === alertId);
+    if (updated) {
+      handleSetExpanded({
+        ...updated,
+        status: 'reviewed',
+        reviewConclusion,
+        reviewNote: reviewNote.trim(),
+      });
+    }
+  };
+
   return (
-    <div className="w-[420px] bg-white border-l-2 border-gray-200 flex flex-col overflow-hidden">
+    <div className="w-[480px] bg-white border-l-2 border-gray-200 flex flex-col overflow-hidden">
       <div className="p-5 border-b border-gray-100">
         <div className="flex items-center gap-3">
           <Shield className="w-7 h-7 text-red-500" />
@@ -123,14 +162,23 @@ export const SupervisorPanel = () => {
                 )}
               >
                 <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <StatusIcon className={cn("w-5 h-5", config.text)} />
                     <span className={cn("text-sm font-bold px-2 py-0.5 rounded-full", config.bg, config.text)}>
                       {config.label}
                     </span>
+                    {alert.status === 'reviewed' && alert.reviewConclusion && (
+                      <span className={cn(
+                        "text-sm font-bold px-2 py-0.5 rounded-full border",
+                        conclusionConfig[alert.reviewConclusion].bg,
+                        conclusionConfig[alert.reviewConclusion].color
+                      )}>
+                        {conclusionConfig[alert.reviewConclusion].text}
+                      </span>
+                    )}
                   </div>
                   <button
-                    onClick={() => setSelectedAlert(isExpanded ? null : alert)}
+                    onClick={() => handleSetExpanded(isExpanded ? null : alert)}
                     className="text-gray-400 hover:text-gray-600"
                   >
                     <Eye className="w-5 h-5" />
@@ -148,49 +196,125 @@ export const SupervisorPanel = () => {
                 </div>
 
                 {isExpanded && (
-                  <div className="border-t border-gray-200 pt-3 mt-2 space-y-2">
-                    <div className="bg-white rounded-lg p-3 text-sm">
+                  <div className="border-t border-gray-200 pt-3 mt-2 space-y-3">
+                    <div className="bg-white rounded-lg p-3 text-sm space-y-1">
                       <p className="text-gray-600">
                         <span className="font-bold">酒精含量：</span>
                         <span className="font-mono font-bold text-red-600">{alert.alcoholLevel.toFixed(1)} mg/100ml</span>
                       </p>
                       {alert.contactedAt && (
-                        <p className="text-gray-600 mt-1">
+                        <p className="text-gray-600">
                           <span className="font-bold">联系时间：</span>{formatTime(alert.contactedAt)}
                         </p>
                       )}
+                      {alert.contactNote && (
+                        <p className="text-gray-600">
+                          <span className="font-bold">联系备注：</span>
+                          <span className="text-gray-800">{alert.contactNote}</span>
+                        </p>
+                      )}
                       {alert.reviewedAt && (
-                        <p className="text-gray-600 mt-1">
+                        <p className="text-gray-600">
                           <span className="font-bold">复核时间：</span>{formatTime(alert.reviewedAt)}
                         </p>
                       )}
+                      {alert.reviewNote && (
+                        <p className="text-gray-600">
+                          <span className="font-bold">复核备注：</span>
+                          <span className="text-gray-800">{alert.reviewNote}</span>
+                        </p>
+                      )}
                     </div>
-                    <div className="flex gap-2">
-                      {alert.status === 'pending' && (
+
+                    {alert.status === 'pending' && (
+                      <div className="space-y-2">
+                        <label className="block text-sm font-bold text-gray-700">联系备注 *</label>
+                        <textarea
+                          value={isExpanded ? contactNote : ''}
+                          onChange={(e) => setContactNote(e.target.value)}
+                          rows={2}
+                          placeholder="例：已电话联系司机，其表示昨晚少量饮酒，已要求其到值班室面谈"
+                          className="w-full p-3 border-2 border-gray-300 rounded-lg text-base focus:border-yellow-500 focus:outline-none resize-none"
+                        />
                         <button
-                          onClick={() => handleStatusChange(alert.id, 'contacted')}
-                          className="flex-1 flex items-center justify-center gap-2 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 active:scale-95 transition-all text-sm font-bold"
+                          onClick={() => handleMarkContacted(alert.id)}
+                          className="w-full flex items-center justify-center gap-2 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 active:scale-95 transition-all text-base font-bold"
                         >
-                          <Phone className="w-4 h-4" />
-                          已联系司机
+                          <Phone className="w-5 h-5" />
+                          标记已联系
                         </button>
-                      )}
-                      {alert.status === 'contacted' && (
-                        <button
-                          onClick={() => handleStatusChange(alert.id, 'reviewed')}
-                          className="flex-1 flex items-center justify-center gap-2 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 active:scale-95 transition-all text-sm font-bold"
-                        >
-                          <CheckCircle className="w-4 h-4" />
-                          确认已复核
-                        </button>
-                      )}
-                      {alert.status === 'reviewed' && (
-                        <div className="flex items-center justify-center gap-2 py-2 text-green-600 text-sm font-bold">
-                          <CheckCircle className="w-4 h-4" />
-                          复核完成
+                      </div>
+                    )}
+
+                    {alert.status === 'contacted' && (
+                      <div className="space-y-2">
+                        <label className="block text-sm font-bold text-gray-700">复核结论 *</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {(['cleared', 'suspended'] as ReviewConclusion[]).map(conclusion => {
+                            const cc = conclusionConfig[conclusion];
+                            const CIcon = cc.icon;
+                            return (
+                              <button
+                                key={conclusion}
+                                onClick={() => setReviewConclusion(conclusion)}
+                                className={cn(
+                                  'flex items-center justify-center gap-2 py-3 rounded-lg border-2 text-base font-bold transition-all',
+                                  reviewConclusion === conclusion
+                                    ? `${cc.bg} ${cc.color} ring-2 ring-offset-1 ring-blue-400 scale-[1.02]`
+                                    : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
+                                )}
+                              >
+                                <CIcon className="w-5 h-5" />
+                                {cc.text}
+                              </button>
+                            );
+                          })}
                         </div>
-                      )}
-                    </div>
+
+                        <label className="block text-sm font-bold text-gray-700 mt-1">复核备注 *</label>
+                        <textarea
+                          value={isExpanded ? reviewNote : ''}
+                          onChange={(e) => setReviewNote(e.target.value)}
+                          rows={2}
+                          placeholder="例：复测结果正常，已对司机进行安全教育，准许上岗"
+                          className="w-full p-3 border-2 border-gray-300 rounded-lg text-base focus:border-green-500 focus:outline-none resize-none"
+                        />
+
+                        <button
+                          onClick={() => handleMarkReviewed(alert.id)}
+                          className={cn(
+                            'w-full flex items-center justify-center gap-2 py-3 rounded-lg text-white active:scale-95 transition-all text-base font-bold',
+                            reviewConclusion === 'cleared'
+                              ? 'bg-green-600 hover:bg-green-700'
+                              : 'bg-red-600 hover:bg-red-700'
+                          )}
+                        >
+                          <Send className="w-5 h-5" />
+                          提交复核结论
+                        </button>
+                      </div>
+                    )}
+
+                    {alert.status === 'reviewed' && (
+                      <div className={cn(
+                        'flex items-center justify-center gap-2 py-3 rounded-lg border-2',
+                        conclusionConfig[alert.reviewConclusion || 'cleared'].bg,
+                        conclusionConfig[alert.reviewConclusion || 'cleared'].color
+                      )}>
+                        {(() => {
+                          const cc = conclusionConfig[alert.reviewConclusion || 'cleared'];
+                          const CIcon = cc.icon;
+                          return (
+                            <>
+                              <CIcon className="w-5 h-5" />
+                              <span className="text-base font-bold">
+                                {cc.text} - 已同步保安管理台
+                              </span>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

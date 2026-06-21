@@ -2,26 +2,42 @@ import { Driver } from '../types';
 import { useAppStore } from '../store/appStore';
 import { useSpeech } from '../hooks/useSpeech';
 import { cn } from '../lib/utils';
-import { CheckCircle, XCircle, Clock } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Shield } from 'lucide-react';
 
 interface DriverGridProps {
   onSelectDriver: (driverId: string) => void;
+  onAlreadyTested?: (type: 'passed' | 'failed' | 'testing' | 'suspended', driver: Driver) => void;
 }
 
-export const DriverGrid = ({ onSelectDriver }: DriverGridProps) => {
-  const { drivers, currentDriver } = useAppStore();
+export const DriverGrid = ({ onSelectDriver, onAlreadyTested }: DriverGridProps) => {
+  const { drivers, currentDriver, selectDriver } = useAppStore();
   const { speak } = useSpeech();
 
   const handleClick = (driver: Driver) => {
-    if (driver.status === 'waiting') {
+    if (driver.status === 'suspended') {
+      speak(`${driver.name}师傅被禁止上岗，请立即拦停`);
+      onAlreadyTested?.('suspended', driver);
+      return;
+    }
+
+    const result = selectDriver(driver.id);
+    if (result.ok) {
       speak(`已选择${driver.name}师傅，请确认`);
       onSelectDriver(driver.id);
-    } else if (driver.status === 'testing') {
-      speak(`${driver.name}师傅正在检测中`);
-    } else if (driver.status === 'passed') {
-      speak(`${driver.name}师傅已通过检测`);
     } else {
-      speak(`${driver.name}师傅需要复核`);
+      if (result.reason === 'already_passed') {
+        speak(`${driver.name}师傅今日已通过检测`);
+        onAlreadyTested?.('passed', driver);
+      } else if (result.reason === 'failed_pending') {
+        speak(`${driver.name}师傅待主管复核，请勿放行`);
+        onAlreadyTested?.('failed', driver);
+      } else if (result.reason === 'testing') {
+        speak(`${driver.name}师傅正在检测中`);
+        onAlreadyTested?.('testing', driver);
+      } else if (result.reason === 'suspended') {
+        speak(`${driver.name}师傅被禁止上岗`);
+        onAlreadyTested?.('suspended', driver);
+      }
     }
   };
 
@@ -31,10 +47,22 @@ export const DriverGrid = ({ onSelectDriver }: DriverGridProps) => {
         return <CheckCircle className="w-8 h-8 text-green-500" />;
       case 'failed':
         return <XCircle className="w-8 h-8 text-orange-500" />;
+      case 'suspended':
+        return <Shield className="w-8 h-8 text-red-600" />;
       case 'testing':
         return <Clock className="w-8 h-8 text-blue-500 animate-spin" />;
       default:
         return null;
+    }
+  };
+
+  const getStatusText = (status: Driver['status']) => {
+    switch (status) {
+      case 'passed': return '已通过';
+      case 'failed': return '待复核';
+      case 'suspended': return '禁止上岗';
+      case 'testing': return '检测中';
+      default: return '';
     }
   };
 
@@ -84,41 +112,43 @@ export const DriverGrid = ({ onSelectDriver }: DriverGridProps) => {
       {otherDrivers.length > 0 && (
         <div>
           <h3 className="text-2xl font-semibold text-gray-600 mb-4">
-            已检测
+            已检测 ({otherDrivers.length}人)
           </h3>
           <div className="grid grid-cols-3 md:grid-cols-6 gap-6">
             {otherDrivers.map(driver => (
-              <div
+              <button
                 key={driver.id}
+                onClick={() => handleClick(driver)}
                 className={cn(
-                  'flex flex-col items-center p-6 rounded-2xl transition-all',
+                  'flex flex-col items-center p-6 rounded-2xl transition-all cursor-pointer',
                   driver.status === 'passed' ? 'bg-green-50 border-2 border-green-200' :
+                  driver.status === 'suspended' ? 'bg-red-50 border-2 border-red-300' :
                   driver.status === 'failed' ? 'bg-orange-50 border-2 border-orange-200' :
                   'bg-blue-50 border-2 border-blue-200',
-                  'opacity-80'
+                  'opacity-90 hover:opacity-100 hover:shadow-lg active:scale-95'
                 )}
               >
                 <div className="relative mb-4">
                   <img
                     src={driver.avatar}
                     alt={driver.name}
-                    className="w-24 h-24 rounded-full bg-gray-100 opacity-70"
+                    className="w-24 h-24 rounded-full bg-gray-100 opacity-80"
                   />
                   <div className="absolute -bottom-1 -right-1">
                     {getStatusIcon(driver.status)}
                   </div>
                 </div>
-                <span className="text-2xl font-bold text-gray-600">{driver.name}</span>
+                <span className="text-2xl font-bold text-gray-700">{driver.name}</span>
                 <span className={cn(
-                  'text-lg mt-1 font-semibold',
+                  'text-lg mt-1 font-bold',
                   driver.status === 'passed' ? 'text-green-600' :
+                  driver.status === 'suspended' ? 'text-red-700' :
                   driver.status === 'failed' ? 'text-orange-600' :
                   'text-blue-600'
                 )}>
-                  {driver.status === 'passed' ? '已通过' :
-                   driver.status === 'failed' ? '待复核' : '检测中'}
+                  {getStatusText(driver.status)}
                 </span>
-              </div>
+              </button>
             ))}
           </div>
         </div>
