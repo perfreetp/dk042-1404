@@ -1,7 +1,10 @@
-import { TestRecord, AlertRecord } from '../types';
+import { TestRecord, AlertRecord, ShiftHandoverRecord, DisposalRecord, ShiftType } from '../types';
 
 const RECORDS_KEY = 'alcohol_test_records';
 const ALERTS_KEY = 'alcohol_test_alerts';
+const SHIFT_HANDOVER_KEY = 'alcohol_test_shift_handover';
+const DISPOSAL_RECORDS_KEY = 'alcohol_test_disposal_records';
+const CURRENT_SHIFT_KEY = 'alcohol_test_current_shift';
 
 export const saveRecords = (records: TestRecord[]): void => {
   try {
@@ -39,10 +42,71 @@ export const loadAlerts = (): AlertRecord[] => {
   return [];
 };
 
+export const saveShiftHandover = (records: ShiftHandoverRecord[]): void => {
+  try {
+    localStorage.setItem(SHIFT_HANDOVER_KEY, JSON.stringify(records));
+  } catch (e) {
+    console.error('保存交接班记录失败:', e);
+  }
+};
+
+export const loadShiftHandover = (): ShiftHandoverRecord[] => {
+  try {
+    const data = localStorage.getItem(SHIFT_HANDOVER_KEY);
+    if (data) return JSON.parse(data);
+  } catch (e) {
+    console.error('加载交接班记录失败:', e);
+  }
+  return [];
+};
+
+export const saveDisposalRecords = (records: DisposalRecord[]): void => {
+  try {
+    localStorage.setItem(DISPOSAL_RECORDS_KEY, JSON.stringify(records));
+  } catch (e) {
+    console.error('保存处置记录失败:', e);
+  }
+};
+
+export const loadDisposalRecords = (): DisposalRecord[] => {
+  try {
+    const data = localStorage.getItem(DISPOSAL_RECORDS_KEY);
+    if (data) return JSON.parse(data);
+  } catch (e) {
+    console.error('加载处置记录失败:', e);
+  }
+  return [];
+};
+
+export const saveCurrentShift = (shift: ShiftType | null): void => {
+  try {
+    if (shift) {
+      localStorage.setItem(CURRENT_SHIFT_KEY, shift);
+    } else {
+      localStorage.removeItem(CURRENT_SHIFT_KEY);
+    }
+  } catch (e) {
+    console.error('保存当前班次失败:', e);
+  }
+};
+
+export const loadCurrentShift = (): ShiftType | null => {
+  try {
+    const data = localStorage.getItem(CURRENT_SHIFT_KEY);
+    if (data === 'morning' || data === 'evening') return data;
+  } catch (e) {
+    console.error('加载当前班次失败:', e);
+  }
+  return null;
+};
+
 export const clearAll = (): void => {
   try {
     localStorage.removeItem(RECORDS_KEY);
     localStorage.removeItem(ALERTS_KEY);
+    localStorage.removeItem(SHIFT_HANDOVER_KEY);
+    localStorage.removeItem(DISPOSAL_RECORDS_KEY);
+    localStorage.removeItem(CURRENT_SHIFT_KEY);
   } catch (e) {
     console.error('清除数据失败:', e);
   }

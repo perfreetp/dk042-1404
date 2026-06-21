@@ -1,15 +1,21 @@
-import { useState } from 'react';
-import { Users, Clock, CheckCircle, AlertTriangle, RefreshCw, Search, ShieldCheck, KeyRound, Shield } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import {
+  Users, Clock, CheckCircle, AlertTriangle, RefreshCw, Search,
+  ShieldCheck, KeyRound, Shield, Car, MapPin, Eye, Hand, Ban
+} from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { formatTime } from '../utils/formatTime';
 import { cn } from '../lib/utils';
 import { PassCodeVerify } from './PassCodeVerify';
+import type { SidebarTab as Tab } from '../pages/Home';
 
-type SidebarTab = 'queue' | 'ledger' | 'verify';
+interface SecuritySidebarProps {
+  activeTab: Tab;
+  onTabChange: (tab: Tab) => void;
+}
 
-export const SecuritySidebar = () => {
-  const { drivers, records, alerts, resetDriverStatus } = useAppStore();
-  const [activeTab, setActiveTab] = useState<SidebarTab>('queue');
+export const SecuritySidebar = ({ activeTab, onTabChange }: SecuritySidebarProps) => {
+  const { drivers, records, alerts, disposalRecords, resetDriverStatus, markDisposalExecuted } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
 
   const waitingDrivers = drivers
@@ -19,6 +25,15 @@ export const SecuritySidebar = () => {
   const todayRecords = records.filter(r =>
     new Date(r.timestamp).toDateString() === new Date().toDateString()
   );
+
+  const todayDisposals = useMemo(() => {
+    const today = new Date().toDateString();
+    return disposalRecords.filter(d => new Date(d.createdAt).toDateString() === today);
+  }, [disposalRecords]);
+
+  const pendingDisposals = todayDisposals.filter(d => !d.executed);
+  const clearedDisposals = pendingDisposals.filter(d => d.conclusion === 'cleared');
+  const suspendedDisposals = pendingDisposals.filter(d => d.conclusion === 'suspended');
 
   const passedToday = todayRecords.filter(r => r.result === 'passed').length;
   const failedToday = todayRecords.filter(r => r.result === 'failed').length;
@@ -37,10 +52,11 @@ export const SecuritySidebar = () => {
       )
     : todayRecords;
 
-  const tabs: { key: SidebarTab; label: string; icon: typeof Users; badge?: number }[] = [
+  const tabs: { key: Tab; label: string; icon: typeof Users; badge?: number }[] = [
     { key: 'queue', label: '排队', icon: Users },
     { key: 'ledger', label: '台账', icon: Clock },
-    { key: 'verify', label: '核验', icon: KeyRound, badge: pendingAlerts || undefined },
+    { key: 'verify', label: '核验', icon: KeyRound },
+    { key: 'disposal', label: '处置', icon: Shield, badge: pendingDisposals.length || undefined },
   ];
 
   const getRecordBadge = (record: typeof todayRecords[number]) => {
@@ -64,6 +80,10 @@ export const SecuritySidebar = () => {
       return { text: '待处理', bg: 'bg-orange-100 border-orange-200', textColor: 'text-orange-700', icon: AlertTriangle, pulse: true };
     }
     return { text: '待复核', bg: 'bg-orange-100 border-orange-200', textColor: 'text-orange-700', icon: AlertTriangle, pulse: false };
+  };
+
+  const handleExecuteDisposal = (disposalId: string) => {
+    markDisposalExecuted(disposalId);
   };
 
   return (
@@ -107,12 +127,12 @@ export const SecuritySidebar = () => {
         <div className="mx-5 mb-3 bg-red-50 rounded-xl p-3 border-2 border-red-300">
           <div className="flex items-center gap-3 mb-2">
             <Shield className="w-6 h-6 text-red-600 animate-pulse" />
-            <span className="text-lg font-bold text-red-700">禁止上岗</span>
+            <span className="text-lg font-bold text-red-700">禁止上岗 · 拦停清单</span>
           </div>
           <div className="space-y-1.5">
             {suspendedDrivers.map(d => (
-              <div key={d.id} className="flex items-center gap-2 text-sm">
-                <img src={d.avatar} alt={d.name} className="w-7 h-7 rounded-full bg-white" />
+              <div key={d.id} className="flex items-center gap-2 text-sm bg-white rounded-lg p-2">
+                <img src={d.avatar} alt={d.name} className="w-7 h-7 rounded-full" />
                 <span className="font-bold text-red-800">{d.name}</span>
                 <span className="text-red-600">· {d.busPlate}</span>
                 <span className="text-red-500">· {d.route}</span>
@@ -144,7 +164,7 @@ export const SecuritySidebar = () => {
           return (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => onTabChange(tab.key)}
               className={cn(
                 'flex-1 flex items-center justify-center gap-1.5 py-3 text-base font-bold border-b-2 transition-all',
                 activeTab === tab.key
@@ -155,7 +175,7 @@ export const SecuritySidebar = () => {
               <Icon className="w-5 h-5" />
               {tab.label}
               {tab.badge && (
-                <span className="bg-orange-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
                   {tab.badge}
                 </span>
               )}
@@ -269,6 +289,12 @@ export const SecuritySidebar = () => {
                           <span className="font-mono font-bold text-blue-600">{record.passCode}</span>
                         </div>
                       )}
+                      {record.released && record.releasedAt && (
+                        <div className="mt-1 text-sm">
+                          <span className="text-gray-400">放行时间：</span>
+                          <span className="text-green-600 font-bold">{formatTime(record.releasedAt)}</span>
+                        </div>
+                      )}
                       {record.result === 'failed' && drivers.find(d => d.id === record.driverId)?.status !== 'suspended' && (
                         <button
                           onClick={() => resetDriverStatus(record.driverId)}
@@ -288,6 +314,111 @@ export const SecuritySidebar = () => {
 
         {activeTab === 'verify' && (
           <PassCodeVerify />
+        )}
+
+        {activeTab === 'disposal' && (
+          <div className="space-y-4">
+            {clearedDisposals.length > 0 && (
+              <div className="rounded-xl border-2 border-green-200 bg-green-50 p-3">
+                <div className="flex items-center gap-2 mb-3">
+                  <ShieldCheck className="w-6 h-6 text-green-600" />
+                  <span className="text-lg font-bold text-green-700">
+                    复核通过待放行 ({clearedDisposals.length})
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {clearedDisposals.map(d => (
+                    <div key={d.id} className="bg-white rounded-lg p-3 border border-green-100">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="font-bold text-gray-800">{d.driverName}</div>
+                        <span className="text-xs text-gray-400">{formatTime(d.createdAt)}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+                        <Car className="w-4 h-4" />{d.busPlate}
+                        <MapPin className="w-4 h-4 ml-2" />{d.route}
+                      </div>
+                      <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded mb-2">
+                        💬 {d.reviewNote}
+                      </div>
+                      <button
+                        onClick={() => handleExecuteDisposal(d.id)}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-green-500 text-white rounded-lg font-bold hover:bg-green-600 active:scale-95 transition-all"
+                      >
+                        <Hand className="w-4 h-4" />
+                        确认已放行
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {suspendedDisposals.length > 0 && (
+              <div className="rounded-xl border-2 border-red-200 bg-red-50 p-3">
+                <div className="flex items-center gap-2 mb-3">
+                  <Ban className="w-6 h-6 text-red-600" />
+                  <span className="text-lg font-bold text-red-700">
+                    禁止上岗待拦停 ({suspendedDisposals.length})
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {suspendedDisposals.map(d => (
+                    <div key={d.id} className="bg-white rounded-lg p-3 border border-red-100">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="font-bold text-gray-800">{d.driverName}</div>
+                        <span className="text-xs text-gray-400">{formatTime(d.createdAt)}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+                        <Car className="w-4 h-4" />{d.busPlate}
+                        <MapPin className="w-4 h-4 ml-2" />{d.route}
+                      </div>
+                      <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded mb-2">
+                        💬 {d.reviewNote}
+                      </div>
+                      <button
+                        onClick={() => handleExecuteDisposal(d.id)}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-red-500 text-white rounded-lg font-bold hover:bg-red-600 active:scale-95 transition-all"
+                      >
+                        <Eye className="w-4 h-4" />
+                        确认已拦停
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {pendingDisposals.length === 0 && (
+              <div className="text-center py-12">
+                <CheckCircle className="w-14 h-14 text-green-400 mx-auto mb-3" />
+                <p className="text-xl font-bold text-gray-500">暂无待处置记录</p>
+                <p className="text-base text-gray-400 mt-1">主管复核后会在此处显示</p>
+              </div>
+            )}
+
+            {todayDisposals.filter(d => d.executed).length > 0 && (
+              <div className="mt-4">
+                <p className="text-sm font-bold text-gray-500 mb-2">
+                  已处理 ({todayDisposals.filter(d => d.executed).length})
+                </p>
+                <div className="space-y-2 opacity-70">
+                  {todayDisposals.filter(d => d.executed).slice(0, 3).map(d => (
+                    <div key={d.id} className="bg-gray-50 rounded-lg p-2.5 border border-gray-200 flex items-center justify-between">
+                      <div>
+                        <span className="font-bold text-gray-700">{d.driverName}</span>
+                        <span className="text-xs text-gray-500 ml-2">
+                          {d.conclusion === 'cleared' ? '已放行' : '已拦停'}
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-400">
+                        {formatTime(d.executedAt || d.createdAt)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

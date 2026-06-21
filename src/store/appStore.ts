@@ -2,9 +2,15 @@ import { create } from 'zustand';
 import {
   Driver, TestRecord, TestStep, AlertRecord, AlertStatus,
   AppState, AppActions, CardScanResult, ReviewConclusion,
+  ShiftHandoverRecord, DisposalRecord, ShiftType,
 } from '../types';
 import { mockDrivers } from '../data/mockData';
-import { loadRecords, saveRecords, loadAlerts, saveAlerts } from '../utils/storage';
+import {
+  loadRecords, saveRecords, loadAlerts, saveAlerts,
+  loadShiftHandover, saveShiftHandover,
+  loadDisposalRecords, saveDisposalRecords,
+  loadCurrentShift, saveCurrentShift,
+} from '../utils/storage';
 import { exportRecordsToCSV, downloadCSV } from '../utils/exportCsv';
 
 interface AppStore extends AppState, AppActions {}
@@ -26,6 +32,8 @@ const generateId = (prefix: string): string =>
 
 const persistRecords = (records: TestRecord[]) => saveRecords(records);
 const persistAlerts = (alerts: AlertRecord[]) => saveAlerts(alerts);
+const persistShiftHandover = (r: ShiftHandoverRecord[]) => saveShiftHandover(r);
+const persistDisposalRecords = (r: DisposalRecord[]) => saveDisposalRecords(r);
 
 export const useAppStore = create<AppStore>((set, get) => ({
   drivers: mockDrivers,
@@ -36,6 +44,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
   alerts: loadAlerts(),
   currentAlcoholLevel: null,
   currentPassCode: null,
+  currentShift: loadCurrentShift(),
+  shiftHandoverRecords: loadShiftHandover(),
+  disposalRecords: loadDisposalRecords(),
 
   selectDriver: (driverId: string) => {
     const driver = get().drivers.find(d => d.id === driverId);
@@ -210,20 +221,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   confirmRelease: () => {
-    const { currentDriver, records } = get();
-    if (currentDriver) {
-      const today = Date.now();
-      const updatedRecords = records.map(r =>
-        r.driverId === currentDriver.id &&
-        r.result === 'passed' &&
-        !r.released &&
-        isSameDay(r.timestamp, today)
-          ? { ...r, released: true }
-          : r
-      );
-      persistRecords(updatedRecords);
-      set({ records: updatedRecords });
-    }
     set({
       currentDriver: null,
       testStep: 'idle',
@@ -256,11 +253,31 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   updateAlertReview: (alertId: string, conclusion: ReviewConclusion, note: string) => {
-    const { alerts, drivers, records } = get();
+    const { alerts, drivers, records, disposalRecords } = get();
     const alert = alerts.find(a => a.id === alertId);
-    if (!alert) return;
+    if (!alert) return null;
 
     const now = Date.now();
+    const disposalId = generateId('DSP');
+
+    const disposalRecord: DisposalRecord = {
+      id: disposalId,
+      alertId,
+      driverId: alert.driverId,
+      driverName: alert.driverName,
+      busPlate: alert.busPlate,
+      route: alert.route,
+      alcoholLevel: alert.alcoholLevel,
+      conclusion,
+      contactNote: alert.contactNote,
+      reviewNote: note,
+      createdAt: now,
+      executed: false,
+    };
+
+    const updatedDisposalRecords = [...disposalRecords, disposalRecord];
+    persistDisposalRecords(updatedDisposalRecords);
+
     const updatedAlerts = alerts.map(a =>
       a.id === alertId
         ? {
@@ -270,6 +287,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
             contactedAt: a.contactedAt || now,
             reviewConclusion: conclusion,
             reviewNote: note,
+            disposalRecordId: disposalId,
           }
         : a
     );
@@ -283,12 +301,19 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     const updatedRecords = records.map(r =>
       r.driverId === alert.driverId && isSameDay(r.timestamp, now)
-        ? { ...r, reviewConclusion: conclusion }
+        ? { ...r, reviewConclusion: conclusion, disposalRecordId }
         : r
     );
     persistRecords(updatedRecords);
 
-    set({ alerts: updatedAlerts, drivers: updatedDrivers, records: updatedRecords });
+    set({
+      alerts: updatedAlerts,
+      drivers: updatedDrivers,
+      records: updatedRecords,
+      disposalRecords: updatedDisposalRecords,
+    });
+
+    return disposalRecord;
   },
 
   verifyPassCode: (code: string) => {
@@ -316,5 +341,139 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const dateStr = new Date().toISOString().slice(0, 10);
     downloadCSV(csv, `校车酒测台账_${dateStr}.csv`);
     return csv;
+  },
+
+  setCurrentShift: (shift: ShiftType) => {
+    saveCurrentShift(shift);
+    set({ currentShift: shift });
+  },
+
+  getPendingItems: () => {
+    const { records, alerts, drivers } = get();
+    const today = Date.now();
+
+    const pendingVerify = records.filter(r =>
+      r.result === 'passed' &&
+      !r.released &&
+      isSameDay(r.timestamp, today)
+    );
+
+    const pendingReview = alerts.filter(a =>
+      a.status !== 'reviewed' &&
+      isSameDay(a.timestamp, today)
+    );
+
+    const suspended = drivers.filter(d => d.status === 'suspended');
+
+    return { pendingVerify, pendingReview, suspended };
+  },
+
+  createShiftHandover: (data: { outgoingGuard: string; incomingGuard: string; handoverNote: string }) => {
+    const { currentShift, shiftHandoverRecords } = get();
+    const { pendingVerify, pendingReview, suspended } = get().getPendingItems();
+
+    const now = Date.now();
+    const outgoingShift: ShiftType = currentShift || 'morning';
+    const incomingShift: ShiftType = outgoingShift === 'morning' ? 'evening' : 'morning';
+
+    const record: ShiftHandoverRecord = {
+      id: generateId('SHF'),
+      date: new Date(now).toISOString().slice(0, 10),
+      outgoingShift,
+      incomingShift,
+      outgoingGuard: data.outgoingGuard,
+      incomingGuard: data.incomingGuard,
+      handoverNote: data.handoverNote,
+      handoverTime: now,
+      snapshot: {
+        pendingVerifyCount: pendingVerify.length,
+        pendingReviewCount: pendingReview.length,
+        suspendedCount: suspended.length,
+        pendingVerify: pendingVerify.map(r => ({
+          driverName: r.driverName,
+          busPlate: r.busPlate,
+          route: r.route,
+          passCode: r.passCode,
+        })),
+        pendingReview: pendingReview.map(a => ({
+          driverName: a.driverName,
+          busPlate: a.busPlate,
+          route: a.route,
+          status: a.status,
+        })),
+        suspended: suspended.map(d => ({
+          driverName: d.name,
+          busPlate: d.busPlate,
+          route: d.route,
+        })),
+      },
+    };
+
+    const updatedRecords = [...shiftHandoverRecords, record];
+    persistShiftHandover(updatedRecords);
+    saveCurrentShift(incomingShift);
+    set({
+      shiftHandoverRecords: updatedRecords,
+      currentShift: incomingShift,
+    });
+
+    return record;
+  },
+
+  markDisposalExecuted: (disposalId: string) => {
+    const { disposalRecords, records } = get();
+    const now = Date.now();
+    const disposal = disposalRecords.find(d => d.id === disposalId);
+    if (!disposal) return;
+
+    const updatedDisposals = disposalRecords.map(d =>
+      d.id === disposalId ? { ...d, executed: true, executedAt: now } : d
+    );
+    persistDisposalRecords(updatedDisposals);
+
+    let updatedRecords = records;
+    if (disposal.conclusion === 'cleared') {
+      const today = Date.now();
+      const targetRecord = records.find(r =>
+        r.driverId === disposal.driverId &&
+        r.result === 'passed' &&
+        !r.released &&
+        isSameDay(r.timestamp, today)
+      );
+      if (targetRecord) {
+        updatedRecords = records.map(r =>
+          r.id === targetRecord.id ? { ...r, released: true, releasedAt: now } : r
+        );
+        persistRecords(updatedRecords);
+      }
+    }
+
+    set({
+      disposalRecords: updatedDisposals,
+      records: updatedRecords,
+    });
+  },
+
+  parseQrContent: (content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed) return { error: '请输入二维码内容' };
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed.passCode && typeof parsed.passCode === 'string') {
+        return {
+          passCode: parsed.passCode.toUpperCase(),
+          driverName: parsed.driverName,
+          busPlate: parsed.busPlate,
+        };
+      }
+      return { error: '二维码中未找到放行码' };
+    } catch {
+      const upper = trimmed.toUpperCase();
+      if (/^[A-Z2-9]{6}$/.test(upper)) {
+        return { passCode: upper };
+      }
+      return { error: '二维码内容格式不正确' };
+    }
   },
 }));

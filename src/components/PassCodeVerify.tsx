@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { KeyRound, CheckCircle, AlertTriangle, Car, MapPin, ShieldCheck, Search, QrCode, Camera, X } from 'lucide-react';
+import {
+  KeyRound, CheckCircle, AlertTriangle, Car, MapPin, ShieldCheck,
+  Search, QrCode, Camera, X, ClipboardPaste, Send
+} from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useSpeech } from '../hooks/useSpeech';
 import { formatTime } from '../utils/formatTime';
@@ -7,7 +10,7 @@ import { cn } from '../lib/utils';
 import type { TestRecord } from '../types';
 
 export const PassCodeVerify = () => {
-  const { verifyPassCode, markRecordReleased, records } = useAppStore();
+  const { verifyPassCode, markRecordReleased, records, parseQrContent } = useAppStore();
   const { speak } = useSpeech();
   const [code, setCode] = useState('');
   const [verifyResult, setVerifyResult] = useState<{
@@ -16,6 +19,9 @@ export const PassCodeVerify = () => {
     alreadyReleased: boolean;
   } | null>(null);
   const [showScanner, setShowScanner] = useState(false);
+  const [showPaste, setShowPaste] = useState(false);
+  const [pasteContent, setPasteContent] = useState('');
+  const [pasteError, setPasteError] = useState('');
 
   const handleVerify = () => {
     const trimmed = code.trim().toUpperCase();
@@ -49,6 +55,7 @@ export const PassCodeVerify = () => {
   const handleQuickFill = (passCode: string) => {
     setCode(passCode);
     setVerifyResult(null);
+    setPasteError('');
   };
 
   const todayPassedRecords = records.filter(
@@ -78,6 +85,7 @@ export const PassCodeVerify = () => {
           setCode(parsed.passCode);
           setShowScanner(false);
           setVerifyResult(null);
+          setPasteError('');
           speak(`已扫描放行码${parsed.passCode}，请确认核验`);
         }
       } catch {
@@ -95,6 +103,28 @@ export const PassCodeVerify = () => {
     setCode(unreleased.passCode!);
     setShowScanner(false);
     setVerifyResult(null);
+    setPasteError('');
+  };
+
+  const handlePasteParse = () => {
+    const result = parseQrContent(pasteContent);
+    if (result.error) {
+      setPasteError(result.error);
+      speak(result.error);
+      return;
+    }
+    if (result.passCode) {
+      setCode(result.passCode);
+      setShowPaste(false);
+      setPasteContent('');
+      setPasteError('');
+      setVerifyResult(null);
+      speak(
+        result.driverName
+          ? `已解析二维码，放行码${result.passCode}，${result.driverName}师傅`
+          : `已解析放行码${result.passCode}`
+      );
+    }
   };
 
   return (
@@ -110,7 +140,7 @@ export const PassCodeVerify = () => {
             <input
               type="text"
               value={code}
-              onChange={e => { setCode(e.target.value.toUpperCase()); setVerifyResult(null); }}
+              onChange={e => { setCode(e.target.value.toUpperCase()); setVerifyResult(null); setPasteError(''); }}
               onKeyDown={e => e.key === 'Enter' && handleVerify()}
               placeholder="输入6位放行码"
               maxLength={6}
@@ -125,14 +155,66 @@ export const PassCodeVerify = () => {
             </button>
           </div>
           <button
-            onClick={() => setShowScanner(true)}
-            className="px-4 py-3 bg-purple-500 text-white rounded-xl font-bold hover:bg-purple-600 active:scale-95 transition-all flex items-center gap-1.5"
+            onClick={() => { setShowPaste(!showPaste); setShowScanner(false); }}
+            className={cn(
+              'px-4 py-3 rounded-xl font-bold hover:bg-green-100 active:scale-95 transition-all flex items-center gap-1.5',
+              showPaste ? 'bg-green-100 text-green-700 border-2 border-green-400' : 'bg-green-50 text-green-600 border-2 border-green-200'
+            )}
+            title="粘贴二维码内容"
+          >
+            <ClipboardPaste className="w-6 h-6" />
+          </button>
+          <button
+            onClick={() => { setShowScanner(!showScanner); setShowPaste(false); }}
+            className={cn(
+              'px-4 py-3 rounded-xl font-bold active:scale-95 transition-all flex items-center gap-1.5',
+              showScanner
+                ? 'bg-purple-100 text-purple-700 border-2 border-purple-400'
+                : 'bg-purple-50 text-purple-600 border-2 border-purple-200 hover:bg-purple-100'
+            )}
             title="扫描放行码二维码"
           >
             <Camera className="w-6 h-6" />
           </button>
         </div>
       </div>
+
+      {showPaste && (
+        <div className="rounded-2xl border-2 border-green-300 bg-green-50 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-base font-bold text-green-700 flex items-center gap-2">
+              <ClipboardPaste className="w-5 h-5" />
+              粘贴二维码内容
+            </h4>
+            <button onClick={() => { setShowPaste(false); setPasteError(''); }} className="text-gray-400 hover:text-gray-600">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <textarea
+            value={pasteContent}
+            onChange={e => { setPasteContent(e.target.value); setPasteError(''); }}
+            rows={3}
+            placeholder='粘贴ResultPass页二维码内容，例如：{"passCode":"ABC123","driverName":"张师傅","busPlate":"沪A12345"}'
+            className="w-full p-3 border-2 border-gray-300 rounded-xl text-sm font-mono focus:border-green-500 focus:outline-none resize-none bg-white"
+          />
+          <p className="text-xs text-gray-500">
+            支持JSON格式（二维码扫描结果）或直接粘贴6位放行码
+          </p>
+          {pasteError && (
+            <p className="text-sm text-red-600 font-bold flex items-center gap-1">
+              <AlertTriangle className="w-4 h-4" />
+              {pasteError}
+            </p>
+          )}
+          <button
+            onClick={handlePasteParse}
+            className="w-full flex items-center justify-center gap-2 py-3 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 active:scale-95 transition-all"
+          >
+            <Send className="w-5 h-5" />
+            解析并填入
+          </button>
+        </div>
+      )}
 
       {showScanner && (
         <div className="rounded-2xl border-2 border-purple-300 bg-purple-50 p-4 space-y-3">
@@ -245,7 +327,7 @@ export const PassCodeVerify = () => {
                 </div>
                 {verifyResult.record.released && (
                   <div className="mt-2 pt-2 border-t border-gray-100 text-sm text-yellow-700 font-bold">
-                  放行时间：{formatTime(verifyResult.record.releasedAt || verifyResult.record.timestamp)}
+                    放行时间：{formatTime(verifyResult.record.releasedAt || verifyResult.record.timestamp)}
                   </div>
                 )}
               </div>

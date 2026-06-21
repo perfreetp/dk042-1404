@@ -1,5 +1,8 @@
 import { useState, useMemo } from 'react';
-import { ArrowLeft, Download, CheckCircle, AlertTriangle, Car, Route, Users, Clock, Shield, ShieldCheck } from 'lucide-react';
+import {
+  ArrowLeft, Download, CheckCircle, AlertTriangle, Car, Route, Users,
+  Clock, Shield, ShieldCheck, XCircle, UserCheck
+} from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useSpeech } from '../hooks/useSpeech';
 import { formatTime } from '../utils/formatTime';
@@ -23,20 +26,32 @@ export const DailySummary = ({ onBack }: DailySummaryProps) => {
     return records.filter(r => new Date(r.timestamp).toDateString() === today);
   }, [records]);
 
+  const todayAlerts = useMemo(() => {
+    const today = new Date().toDateString();
+    return alerts.filter(a => new Date(a.timestamp).toDateString() === today);
+  }, [alerts]);
+
   const stats = useMemo(() => {
     const passed = todayRecords.filter(r => r.result === 'passed');
     const failed = todayRecords.filter(r => r.result === 'failed');
     const released = passed.filter(r => r.released);
     const unreleased = passed.filter(r => !r.released);
+
+    const pendingReview = todayAlerts.filter(a => a.status !== 'reviewed');
+    const reviewedCleared = todayAlerts.filter(a => a.status === 'reviewed' && a.reviewConclusion === 'cleared');
+    const reviewedSuspended = todayAlerts.filter(a => a.status === 'reviewed' && a.reviewConclusion === 'suspended');
+
     return {
       total: todayRecords.length,
       passed,
       passedCount: passed.length,
-      failedCount: failed.length,
       releasedCount: released.length,
       unreleasedCount: unreleased.length,
+      pendingReviewCount: pendingReview.length,
+      clearedCount: reviewedCleared.length,
+      suspendedCount: reviewedSuspended.length,
     };
-  }, [todayRecords]);
+  }, [todayRecords, todayAlerts]);
 
   const groupedRecords = useMemo(() => {
     const groups = new Map<string, TestRecord[]>();
@@ -62,10 +77,17 @@ export const DailySummary = ({ onBack }: DailySummaryProps) => {
 
   const recordConclusion = (record: TestRecord): { text: string; color: string; bg: string } | null => {
     const alert = getAlertForRecord(record);
+    const suspended = getDriverSuspended(record.driverId);
+
+    if (suspended) {
+      return { text: '禁止放行', color: 'text-red-700', bg: 'bg-red-100' };
+    }
+
     if (record.result === 'passed') {
       if (record.released) return { text: '已放行', color: 'text-green-700', bg: 'bg-green-100' };
       return { text: '待放行', color: 'text-blue-700', bg: 'bg-blue-100' };
     }
+
     if (!alert) return { text: '待复核', color: 'text-orange-700', bg: 'bg-orange-100' };
     if (alert.status === 'pending') return { text: '待处理', color: 'text-orange-700', bg: 'bg-orange-100' };
     if (alert.status === 'contacted') return { text: '已联系', color: 'text-yellow-700', bg: 'bg-yellow-100' };
@@ -86,7 +108,6 @@ export const DailySummary = ({ onBack }: DailySummaryProps) => {
       label: '通过检测',
       value: stats.passedCount,
       icon: CheckCircle,
-      color: 'green',
       bg: 'bg-gradient-to-br from-green-50 to-green-100',
       border: 'border-green-200',
       text: 'text-green-700',
@@ -94,29 +115,44 @@ export const DailySummary = ({ onBack }: DailySummaryProps) => {
     },
     {
       label: '待复核',
-      value: stats.failedCount,
+      value: stats.pendingReviewCount,
       icon: AlertTriangle,
-      color: 'orange',
       bg: 'bg-gradient-to-br from-orange-50 to-orange-100',
       border: 'border-orange-200',
       text: 'text-orange-700',
       iconColor: 'text-orange-500',
     },
     {
-      label: '已放行',
-      value: stats.releasedCount,
-      icon: ShieldCheck,
-      color: 'emerald',
+      label: '复核通过',
+      value: stats.clearedCount,
+      icon: UserCheck,
       bg: 'bg-gradient-to-br from-emerald-50 to-emerald-100',
       border: 'border-emerald-200',
       text: 'text-emerald-700',
       iconColor: 'text-emerald-500',
     },
     {
+      label: '禁止上岗',
+      value: stats.suspendedCount,
+      icon: XCircle,
+      bg: 'bg-gradient-to-br from-red-50 to-red-100',
+      border: 'border-red-200',
+      text: 'text-red-700',
+      iconColor: 'text-red-500',
+    },
+    {
+      label: '已放行',
+      value: stats.releasedCount,
+      icon: ShieldCheck,
+      bg: 'bg-gradient-to-br from-teal-50 to-teal-100',
+      border: 'border-teal-200',
+      text: 'text-teal-700',
+      iconColor: 'text-teal-500',
+    },
+    {
       label: '未放行',
       value: stats.unreleasedCount,
       icon: Clock,
-      color: 'blue',
       bg: 'bg-gradient-to-br from-blue-50 to-blue-100',
       border: 'border-blue-200',
       text: 'text-blue-700',
@@ -153,24 +189,24 @@ export const DailySummary = ({ onBack }: DailySummaryProps) => {
         </button>
       </div>
 
-      <div className="grid grid-cols-4 gap-5 px-10 py-6">
+      <div className="grid grid-cols-6 gap-5 px-10 py-6">
         {statCards.map(card => {
           const Icon = card.icon;
           return (
             <div
               key={card.label}
               className={cn(
-                'p-6 rounded-2xl border-2 shadow-sm',
+                'p-5 rounded-2xl border-2 shadow-sm',
                 card.bg,
                 card.border
               )}
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className={cn('text-lg font-semibold mb-2', card.text)}>{card.label}</p>
-                  <p className={cn('text-5xl font-black', card.text)}>{card.value}</p>
+                  <p className={cn('text-base font-semibold mb-1', card.text)}>{card.label}</p>
+                  <p className={cn('text-4xl font-black', card.text)}>{card.value}</p>
                 </div>
-                <Icon className={cn('w-12 h-12', card.iconColor, 'opacity-80')} />
+                <Icon className={cn('w-10 h-10', card.iconColor, 'opacity-80')} />
               </div>
             </div>
           );
@@ -219,6 +255,14 @@ export const DailySummary = ({ onBack }: DailySummaryProps) => {
               const isExpanded = expandedGroup === groupKey;
               const groupPassed = groupRecords.filter(r => r.result === 'passed').length;
               const groupFailed = groupRecords.filter(r => r.result === 'failed').length;
+              const groupCleared = groupRecords.filter(r => {
+                const a = getAlertForRecord(r);
+                return a?.status === 'reviewed' && a.reviewConclusion === 'cleared';
+              }).length;
+              const groupSuspended = groupRecords.filter(r => {
+                const a = getAlertForRecord(r);
+                return a?.status === 'reviewed' && a.reviewConclusion === 'suspended';
+              }).length;
               return (
                 <div
                   key={groupKey}
@@ -245,9 +289,21 @@ export const DailySummary = ({ onBack }: DailySummaryProps) => {
                           <CheckCircle className="w-5 h-5" />
                           通过 {groupPassed}
                         </span>
+                        {groupCleared > 0 && (
+                          <span className="flex items-center gap-1.5 text-emerald-600">
+                            <UserCheck className="w-5 h-5" />
+                            复核通过 {groupCleared}
+                          </span>
+                        )}
+                        {groupSuspended > 0 && (
+                          <span className="flex items-center gap-1.5 text-red-600">
+                            <XCircle className="w-5 h-5" />
+                            禁岗 {groupSuspended}
+                          </span>
+                        )}
                         <span className="flex items-center gap-1.5 text-orange-600">
                           <AlertTriangle className="w-5 h-5" />
-                          待复核 {groupFailed}
+                          待复核 {groupFailed - groupCleared - groupSuspended}
                         </span>
                       </div>
                       <span className={cn(
@@ -293,6 +349,11 @@ export const DailySummary = ({ onBack }: DailySummaryProps) => {
                                   {record.passCode && (
                                     <div className="text-sm font-mono font-bold text-blue-600">
                                       {record.passCode}
+                                    </div>
+                                  )}
+                                  {record.released && record.releasedAt && (
+                                    <div className="text-sm text-teal-600 font-bold">
+                                      放行 {formatTime(record.releasedAt)}
                                     </div>
                                   )}
                                 </div>

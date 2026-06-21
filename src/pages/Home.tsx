@@ -6,21 +6,32 @@ import { CardReader } from '../components/CardReader';
 import { SecuritySidebar } from '../components/SecuritySidebar';
 import { SupervisorPanel } from '../components/SupervisorPanel';
 import { DailySummary } from '../components/DailySummary';
+import { ShiftHandover } from '../components/ShiftHandover';
 import { TestProcess } from '../components/TestProcess';
 import { ResultPass } from '../components/ResultPass';
 import { ResultFail } from '../components/ResultFail';
-import { Play, X, Shield, AlertTriangle, CheckCircle, Clock, BarChart3 } from 'lucide-react';
+import { Play, X, Shield, AlertTriangle, CheckCircle, Clock, BarChart3, Handshake } from 'lucide-react';
 import { cn } from '../lib/utils';
-import type { Driver } from '../types';
+import type { Driver, ShiftType } from '../types';
 
-type PageState = 'home' | 'confirm' | 'testing' | 'result' | 'daily';
+type PageState = 'home' | 'confirm' | 'testing' | 'result' | 'daily' | 'handover';
 type SidebarMode = 'security' | 'supervisor';
+export type SidebarTab = 'queue' | 'ledger' | 'verify' | 'disposal';
+
+const shiftLabels: Record<ShiftType, { label: string; icon: string; color: string }> = {
+  morning: { label: '早班', icon: '🌅', color: 'text-amber-600' },
+  evening: { label: '晚班', icon: '🌙', color: 'text-indigo-600' },
+};
 
 export const Home = () => {
-  const { currentDriver, testResult, selectDriver, resetTest, alerts, records, selectDriverByCard } = useAppStore();
+  const {
+    currentDriver, testResult, selectDriver, resetTest, alerts, records,
+    selectDriverByCard, currentShift,
+  } = useAppStore();
   const { speak } = useSpeech();
   const [pageState, setPageState] = useState<PageState>('home');
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('security');
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('queue');
   const [driverBanner, setDriverBanner] = useState<{
     type: 'passed' | 'failed' | 'testing' | 'suspended';
     driver: Driver;
@@ -74,7 +85,9 @@ export const Home = () => {
   };
 
   const renderSidebar = () => {
-    return sidebarMode === 'security' ? <SecuritySidebar /> : <SupervisorPanel />;
+    return sidebarMode === 'security'
+      ? <SecuritySidebar activeTab={sidebarTab} onTabChange={setSidebarTab} />
+      : <SupervisorPanel />;
   };
 
   const renderDriverBanner = () => {
@@ -144,6 +157,14 @@ export const Home = () => {
       );
     }
 
+    if (pageState === 'handover') {
+      return (
+        <div className="flex flex-1">
+          <ShiftHandover onBack={() => setPageState('home')} />
+        </div>
+      );
+    }
+
     if (pageState === 'home') {
       return (
         <div className="flex flex-1">
@@ -166,7 +187,7 @@ export const Home = () => {
             <h2 className="text-5xl font-bold text-gray-800 mb-10">
               请确认您的信息
             </h2>
-            
+
             <div className="flex flex-col items-center mb-12">
               <img
                 src={currentDriver.avatar}
@@ -249,7 +270,32 @@ export const Home = () => {
               <p className="text-2xl text-blue-100 mt-1">安全驾驶 · 为孩子保驾护航</p>
             </div>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4">
+            {currentShift && (
+              <div className={cn(
+                'flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-lg',
+                'bg-white/20 backdrop-blur-sm border border-white/30'
+              )}>
+                <span className="text-2xl">{shiftLabels[currentShift].icon}</span>
+                <span className={shiftLabels[currentShift].color + ' font-bold text-white'}>
+                  {shiftLabels[currentShift].label}
+                </span>
+              </div>
+            )}
+
+            <button
+              onClick={() => setPageState(pageState === 'handover' ? 'home' : 'handover')}
+              className={cn(
+                'flex items-center gap-2 px-5 py-3 rounded-xl text-lg font-bold transition-all',
+                pageState === 'handover'
+                  ? 'bg-white text-purple-600 shadow-lg'
+                  : 'bg-purple-500 text-white hover:bg-purple-400'
+              )}
+            >
+              <Handshake className="w-6 h-6" />
+              交接班
+            </button>
+
             <button
               onClick={() => setPageState(pageState === 'daily' ? 'home' : 'daily')}
               className={cn(
@@ -309,7 +355,7 @@ export const Home = () => {
 
       <footer className="bg-gray-100 border-t-2 border-gray-200 px-12 py-4">
         <div className="flex items-center justify-between text-lg text-gray-500">
-          <p>© 2024 校车安全管理系统 · 版本 v2.1.0</p>
+          <p>© 2024 校车安全管理系统 · 版本 v2.2.0</p>
           <div className="flex items-center gap-6">
             <span className="flex items-center gap-2">
               <span className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />

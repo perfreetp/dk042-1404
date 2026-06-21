@@ -22,6 +22,7 @@ export interface TestRecord {
   released: boolean;
   releasedAt?: number;
   reviewConclusion?: 'cleared' | 'suspended';
+  disposalRecordId?: string;
 }
 
 export type TestStep = 'idle' | 'blow' | 'waiting' | 'result';
@@ -51,6 +52,44 @@ export interface AlertRecord {
   reviewedAt?: number;
   reviewConclusion?: ReviewConclusion;
   reviewNote?: string;
+  disposalRecordId?: string;
+}
+
+export type ShiftType = 'morning' | 'evening';
+
+export interface ShiftHandoverRecord {
+  id: string;
+  date: string;
+  outgoingShift: ShiftType;
+  incomingShift: ShiftType;
+  outgoingGuard: string;
+  incomingGuard: string;
+  handoverNote: string;
+  handoverTime: number;
+  snapshot: {
+    pendingVerifyCount: number;
+    pendingReviewCount: number;
+    suspendedCount: number;
+    pendingVerify: Array<{ driverName: string; busPlate: string; route: string; passCode?: string }>;
+    pendingReview: Array<{ driverName: string; busPlate: string; route: string; status: AlertStatus }>;
+    suspended: Array<{ driverName: string; busPlate: string; route: string }>;
+  };
+}
+
+export interface DisposalRecord {
+  id: string;
+  alertId: string;
+  driverId: string;
+  driverName: string;
+  busPlate: string;
+  route: string;
+  alcoholLevel: number;
+  conclusion: ReviewConclusion;
+  contactNote?: string;
+  reviewNote: string;
+  createdAt: number;
+  executed: boolean;
+  executedAt?: number;
 }
 
 export interface AppState {
@@ -62,6 +101,9 @@ export interface AppState {
   alerts: AlertRecord[];
   currentAlcoholLevel: number | null;
   currentPassCode: string | null;
+  currentShift: ShiftType | null;
+  shiftHandoverRecords: ShiftHandoverRecord[];
+  disposalRecords: DisposalRecord[];
 }
 
 export interface AppActions {
@@ -74,8 +116,17 @@ export interface AppActions {
   confirmRelease: () => void;
   resetDriverStatus: (driverId: string) => void;
   updateAlertContact: (alertId: string, note: string) => void;
-  updateAlertReview: (alertId: string, conclusion: ReviewConclusion, note: string) => void;
+  updateAlertReview: (alertId: string, conclusion: ReviewConclusion, note: string) => DisposalRecord | null;
   verifyPassCode: (code: string) => { valid: boolean; record?: TestRecord; alreadyReleased: boolean };
   markRecordReleased: (recordId: string) => void;
   exportTodayLedger: () => string;
+  setCurrentShift: (shift: ShiftType) => void;
+  createShiftHandover: (data: { outgoingGuard: string; incomingGuard: string; handoverNote: string }) => ShiftHandoverRecord;
+  getPendingItems: () => {
+    pendingVerify: TestRecord[];
+    pendingReview: AlertRecord[];
+    suspended: Driver[];
+  };
+  markDisposalExecuted: (disposalId: string) => void;
+  parseQrContent: (content: string) => { passCode?: string; driverName?: string; busPlate?: string; error?: string };
 }

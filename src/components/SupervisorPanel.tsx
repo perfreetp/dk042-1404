@@ -63,7 +63,7 @@ export const SupervisorPanel = () => {
       speak('请先填写复核备注');
       return;
     }
-    updateAlertReview(alertId, reviewConclusion, reviewNote.trim());
+    const disposal = updateAlertReview(alertId, reviewConclusion, reviewNote.trim());
     speak(
       reviewConclusion === 'cleared'
         ? '复核通过，已同步保安台允许放行'
@@ -76,6 +76,7 @@ export const SupervisorPanel = () => {
         status: 'reviewed',
         reviewConclusion,
         reviewNote: reviewNote.trim(),
+        disposalRecordId: disposal?.id,
       });
     }
   };
@@ -222,6 +223,11 @@ export const SupervisorPanel = () => {
                         <p className="text-gray-600">
                           <span className="font-bold">复核备注：</span>
                           <span className="text-gray-800">{alert.reviewNote}</span>
+                        </p>
+                      )}
+                      {alert.disposalRecordId && (
+                        <p className="text-gray-500 text-xs font-mono">
+                          <span className="font-bold">处置记录编号：</span>{alert.disposalRecordId}
                         </p>
                       )}
                     </div>
