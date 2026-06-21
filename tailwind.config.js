@@ -1,0 +1,75 @@
+/** @type {import('tailwindcss').Config} */
+
+export default {
+  darkMode: "class",
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  theme: {
+    container: {
+      center: true,
+    },
+    extend: {
+      colors: {
+        primary: {
+          50: '#E8F0FF',
+          100: '#C7D8FF',
+          200: '#94B4FF',
+          300: '#5F8FFF',
+          400: '#2F6BFF',
+          500: '#165DFF',
+          600: '#0E47CC',
+          700: '#0A3399',
+          800: '#061F66',
+          900: '#030F33',
+        },
+        success: {
+          50: '#E8FFF0',
+          100: '#B8FFCF',
+          200: '#80FFA5',
+          300: '#40FF7A',
+          400: '#10E850',
+          500: '#00B42A',
+          600: '#008F21',
+          700: '#006A19',
+          800: '#004410',
+          900: '#001F07',
+        },
+        warning: {
+          50: '#FFF0E8',
+          100: '#FFD4B8',
+          200: '#FFB080',
+          300: '#FF8A40',
+          400: '#FF6A10',
+          500: '#F53F3F',
+          600: '#CC2B2B',
+          700: '#991F1F',
+          800: '#661414',
+          900: '#330909',
+        },
+      },
+      fontFamily: {
+        sans: ['"Source Han Sans SC"', '"Noto Sans SC"', '"PingFang SC"', 'system-ui', 'sans-serif'],
+      },
+      fontSize: {
+        'xs': '14px',
+        'sm': '16px',
+        'base': '18px',
+        'lg': '20px',
+        'xl': '24px',
+        '2xl': '28px',
+        '3xl': '32px',
+        '4xl': '40px',
+        '5xl': '48px',
+        '6xl': '56px',
+        '7xl': '64px',
+        '8xl': '80px',
+        '9xl': '96px',
+      },
+      animation: {
+        'bounce-slow': 'bounce 2s infinite',
+        'pulse-slow': 'pulse 3s infinite',
+        'spin-slow': 'spin 2s linear infinite',
+      },
+    },
+  },
+  plugins: [],
+};

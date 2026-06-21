@@ -1,0 +1,66 @@
+import { Driver, TestRecord } from '../types';
+
+export const mockDrivers: Driver[] = [
+  {
+    id: '1',
+    name: '张建国',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=zhang',
+    cardNumber: 'DRV001',
+    busPlate: '京A·12345',
+    route: '1号线：阳光小区→实验学校',
+    status: 'waiting',
+    queuePosition: 1,
+  },
+  {
+    id: '2',
+    name: '李卫东',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=li',
+    cardNumber: 'DRV002',
+    busPlate: '京B·67890',
+    route: '2号线：幸福里→中心小学',
+    status: 'waiting',
+    queuePosition: 2,
+  },
+  {
+    id: '3',
+    name: '王和平',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=wang',
+    cardNumber: 'DRV003',
+    busPlate: '京C·11111',
+    route: '3号线：花园邨→第一中学',
+    status: 'waiting',
+    queuePosition: 3,
+  },
+  {
+    id: '4',
+    name: '赵解放',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=zhao',
+    cardNumber: 'DRV004',
+    busPlate: '京D·22222',
+    route: '4号线：新兴街→附属小学',
+    status: 'waiting',
+    queuePosition: 4,
+  },
+  {
+    id: '5',
+    name: '刘援朝',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=liu',
+    cardNumber: 'DRV005',
+    busPlate: '京E·33333',
+    route: '5号线：春风里→实验二小',
+    status: 'waiting',
+    queuePosition: 5,
+  },
+  {
+    id: '6',
+    name: '陈抗美',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=chen',
+    cardNumber: 'DRV006',
+    busPlate: '京F·44444',
+    route: '6号线：朝阳路→第三中学',
+    status: 'waiting',
+    queuePosition: 6,
+  },
+];
+
+export const mockRecords: TestRecord[] = [];
