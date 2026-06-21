@@ -4,28 +4,27 @@ import { useSpeech } from '../hooks/useSpeech';
 import { DriverGrid } from '../components/DriverGrid';
 import { CardReader } from '../components/CardReader';
 import { SecuritySidebar } from '../components/SecuritySidebar';
+import { SupervisorPanel } from '../components/SupervisorPanel';
 import { TestProcess } from '../components/TestProcess';
 import { ResultPass } from '../components/ResultPass';
 import { ResultFail } from '../components/ResultFail';
-import { Play, X } from 'lucide-react';
+import { Play, X, Shield, AlertTriangle } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 type PageState = 'home' | 'confirm' | 'testing' | 'result';
+type SidebarMode = 'security' | 'supervisor';
 
 export const Home = () => {
-  const { currentDriver, testResult, selectDriver, resetTest } = useAppStore();
+  const { currentDriver, testResult, selectDriver, resetTest, alerts } = useAppStore();
   const { speak } = useSpeech();
   const [pageState, setPageState] = useState<PageState>('home');
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>('security');
+
+  const pendingAlerts = alerts.filter(a => a.status === 'pending').length;
 
   const handleSelectDriver = (driverId: string) => {
     selectDriver(driverId);
     setPageState('confirm');
-  };
-
-  const handleCardDetected = () => {
-    if (currentDriver) {
-      setPageState('confirm');
-    }
   };
 
   const handleStartTest = () => {
@@ -51,6 +50,10 @@ export const Home = () => {
     setPageState('home');
   };
 
+  const renderSidebar = () => {
+    return sidebarMode === 'security' ? <SecuritySidebar /> : <SupervisorPanel />;
+  };
+
   const renderContent = () => {
     if (pageState === 'home') {
       return (
@@ -58,10 +61,10 @@ export const Home = () => {
           <div className="flex-1 flex flex-col">
             <DriverGrid onSelectDriver={handleSelectDriver} />
             <div className="p-8 pt-0">
-              <CardReader onCardDetected={handleCardDetected} />
+              <CardReader onCardSuccess={() => setPageState('confirm')} />
             </div>
           </div>
-          <SecuritySidebar />
+          {renderSidebar()}
         </div>
       );
     }
@@ -122,7 +125,7 @@ export const Home = () => {
       return (
         <div className="flex">
           <TestProcess onBack={handleBack} onComplete={handleTestComplete} />
-          <SecuritySidebar />
+          {renderSidebar()}
         </div>
       );
     }
@@ -135,7 +138,7 @@ export const Home = () => {
           ) : (
             <ResultFail onBack={handleBack} onConfirm={handleConfirmResult} />
           )}
-          <SecuritySidebar />
+          {renderSidebar()}
         </div>
       );
     }
@@ -156,11 +159,43 @@ export const Home = () => {
               <p className="text-2xl text-blue-100 mt-1">安全驾驶 · 为孩子保驾护航</p>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-3xl font-bold">{new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-            <p className="text-2xl text-blue-100 mt-1">
-              {new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
-            </p>
+          <div className="flex items-center gap-6">
+            <div className="flex bg-blue-500 rounded-xl p-1">
+              <button
+                onClick={() => setSidebarMode('security')}
+                className={cn(
+                  'px-5 py-2 rounded-lg text-lg font-bold transition-all',
+                  sidebarMode === 'security'
+                    ? 'bg-white text-blue-600 shadow'
+                    : 'text-white hover:bg-blue-400'
+                )}
+              >
+                保安管理台
+              </button>
+              <button
+                onClick={() => setSidebarMode('supervisor')}
+                className={cn(
+                  'px-5 py-2 rounded-lg text-lg font-bold transition-all flex items-center gap-2',
+                  sidebarMode === 'supervisor'
+                    ? 'bg-white text-red-600 shadow'
+                    : 'text-white hover:bg-blue-400'
+                )}
+              >
+                <Shield className="w-5 h-5" />
+                主管告警
+                {pendingAlerts > 0 && (
+                  <span className="bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center animate-pulse">
+                    {pendingAlerts}
+                  </span>
+                )}
+              </button>
+            </div>
+            <div className="text-right">
+              <p className="text-3xl font-bold">{new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              <p className="text-2xl text-blue-100 mt-1">
+                {new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </div>
           </div>
         </div>
       </header>
@@ -171,7 +206,7 @@ export const Home = () => {
 
       <footer className="bg-gray-100 border-t-2 border-gray-200 px-12 py-4">
         <div className="flex items-center justify-between text-lg text-gray-500">
-          <p>© 2024 校车安全管理系统 · 版本 v1.0.0</p>
+          <p>© 2024 校车安全管理系统 · 版本 v2.0.0</p>
           <div className="flex items-center gap-6">
             <span className="flex items-center gap-2">
               <span className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />

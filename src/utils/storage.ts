@@ -1,31 +1,49 @@
-import { TestRecord } from '../types';
+import { TestRecord, AlertRecord } from '../types';
 
-const STORAGE_KEY = 'alcohol_test_records';
+const RECORDS_KEY = 'alcohol_test_records';
+const ALERTS_KEY = 'alcohol_test_alerts';
 
 export const saveRecords = (records: TestRecord[]): void => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-  } catch (error) {
-    console.error('保存记录失败:', error);
+    localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+  } catch (e) {
+    console.error('保存记录失败:', e);
   }
 };
 
 export const loadRecords = (): TestRecord[] => {
   try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    if (data) {
-      return JSON.parse(data);
-    }
-  } catch (error) {
-    console.error('加载记录失败:', error);
+    const data = localStorage.getItem(RECORDS_KEY);
+    if (data) return JSON.parse(data);
+  } catch (e) {
+    console.error('加载记录失败:', e);
   }
   return [];
 };
 
-export const clearRecords = (): void => {
+export const saveAlerts = (alerts: AlertRecord[]): void => {
   try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch (error) {
-    console.error('清除记录失败:', error);
+    localStorage.setItem(ALERTS_KEY, JSON.stringify(alerts));
+  } catch (e) {
+    console.error('保存告警失败:', e);
+  }
+};
+
+export const loadAlerts = (): AlertRecord[] => {
+  try {
+    const data = localStorage.getItem(ALERTS_KEY);
+    if (data) return JSON.parse(data);
+  } catch (e) {
+    console.error('加载告警失败:', e);
+  }
+  return [];
+};
+
+export const clearAll = (): void => {
+  try {
+    localStorage.removeItem(RECORDS_KEY);
+    localStorage.removeItem(ALERTS_KEY);
+  } catch (e) {
+    console.error('清除数据失败:', e);
   }
 };

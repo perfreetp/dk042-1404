@@ -1,4 +1,4 @@
-import { Driver, TestRecord } from '../types';
+import { Driver } from '../types';
 
 export const mockDrivers: Driver[] = [
   {
@@ -62,5 +62,3 @@ export const mockDrivers: Driver[] = [
     queuePosition: 6,
   },
 ];
-
-export const mockRecords: TestRecord[] = [];
