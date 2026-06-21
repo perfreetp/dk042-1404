@@ -10,11 +10,12 @@ import { ShiftHandover } from '../components/ShiftHandover';
 import { TestProcess } from '../components/TestProcess';
 import { ResultPass } from '../components/ResultPass';
 import { ResultFail } from '../components/ResultFail';
+import { DisposalTimeline } from '../components/DisposalTimeline';
 import { Play, X, Shield, AlertTriangle, CheckCircle, Clock, BarChart3, Handshake } from 'lucide-react';
 import { cn } from '../lib/utils';
 import type { Driver, ShiftType } from '../types';
 
-type PageState = 'home' | 'confirm' | 'testing' | 'result' | 'daily' | 'handover';
+type PageState = 'home' | 'confirm' | 'testing' | 'result' | 'daily' | 'handover' | 'timeline';
 type SidebarMode = 'security' | 'supervisor';
 export type SidebarTab = 'queue' | 'ledger' | 'verify' | 'disposal';
 
@@ -37,6 +38,7 @@ export const Home = () => {
     driver: Driver;
     passCode?: string;
   } | null>(null);
+  const [selectedDisposalId, setSelectedDisposalId] = useState<string | null>(null);
 
   const pendingAlerts = alerts.filter(a => a.status === 'pending').length;
 
@@ -86,7 +88,14 @@ export const Home = () => {
 
   const renderSidebar = () => {
     return sidebarMode === 'security'
-      ? <SecuritySidebar activeTab={sidebarTab} onTabChange={setSidebarTab} />
+      ? <SecuritySidebar
+          activeTab={sidebarTab}
+          onTabChange={setSidebarTab}
+          onViewTimeline={(disposalId) => {
+            setSelectedDisposalId(disposalId);
+            setPageState('timeline');
+          }}
+        />
       : <SupervisorPanel />;
   };
 
@@ -161,6 +170,20 @@ export const Home = () => {
       return (
         <div className="flex flex-1">
           <ShiftHandover onBack={() => setPageState('home')} />
+        </div>
+      );
+    }
+
+    if (pageState === 'timeline' && selectedDisposalId) {
+      return (
+        <div className="flex flex-1">
+          <DisposalTimeline
+            disposalId={selectedDisposalId}
+            onBack={() => {
+              setPageState('home');
+              setSelectedDisposalId(null);
+            }}
+          />
         </div>
       );
     }
@@ -355,7 +378,7 @@ export const Home = () => {
 
       <footer className="bg-gray-100 border-t-2 border-gray-200 px-12 py-4">
         <div className="flex items-center justify-between text-lg text-gray-500">
-          <p>© 2024 校车安全管理系统 · 版本 v2.2.0</p>
+          <p>© 2024 校车安全管理系统 · 版本 v2.3.0</p>
           <div className="flex items-center gap-6">
             <span className="flex items-center gap-2">
               <span className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />

@@ -11,6 +11,8 @@ export const exportRecordsToCSV = (records: TestRecord[], alerts: AlertRecord[])
     '酒精含量(mg/100ml)',
     '放行码',
     '是否已放行',
+    '放行时间',
+    '放行类型',
     '主管复核结论',
     '复核备注',
   ];
@@ -23,6 +25,10 @@ export const exportRecordsToCSV = (records: TestRecord[], alerts: AlertRecord[])
     c === 'cleared' ? '复核通过，可放行' :
     c === 'suspended' ? '禁止上岗，拦停' : '';
 
+  const releaseTypeText = (t?: 'direct' | 'review') =>
+    t === 'direct' ? '直接核验放行' :
+    t === 'review' ? '主管复核后放行' : '';
+
   const rows = records.map(r => {
     const alert = getAlertForRecord(r);
     return [
@@ -34,6 +40,8 @@ export const exportRecordsToCSV = (records: TestRecord[], alerts: AlertRecord[])
       r.alcoholLevel?.toFixed(1) ?? '',
       r.passCode ?? '',
       r.released ? '已放行' : '未放行',
+      r.releasedAt ? formatTime(r.releasedAt) : '',
+      releaseTypeText(r.releaseType),
       conclusionText(alert?.reviewConclusion ?? r.reviewConclusion),
       alert?.reviewNote ?? '',
     ].map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',');

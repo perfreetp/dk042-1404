@@ -12,9 +12,10 @@ import type { SidebarTab as Tab } from '../pages/Home';
 interface SecuritySidebarProps {
   activeTab: Tab;
   onTabChange: (tab: Tab) => void;
+  onViewTimeline?: (disposalId: string) => void;
 }
 
-export const SecuritySidebar = ({ activeTab, onTabChange }: SecuritySidebarProps) => {
+export const SecuritySidebar = ({ activeTab, onTabChange, onViewTimeline }: SecuritySidebarProps) => {
   const { drivers, records, alerts, disposalRecords, resetDriverStatus, markDisposalExecuted } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -255,9 +256,11 @@ export const SecuritySidebar = ({ activeTab, onTabChange }: SecuritySidebarProps
                   return (
                     <div
                       key={record.id}
+                      onClick={() => record.disposalRecordId && onViewTimeline?.(record.disposalRecordId)}
                       className={cn(
-                        'p-3 rounded-xl border-2',
-                        record.result === 'passed' ? 'bg-green-50 border-green-100' : 'bg-orange-50 border-orange-100'
+                        'p-3 rounded-xl border-2 transition-all',
+                        record.result === 'passed' ? 'bg-green-50 border-green-100' : 'bg-orange-50 border-orange-100',
+                        record.disposalRecordId && onViewTimeline ? 'cursor-pointer hover:shadow-md hover:scale-[1.01]' : ''
                       )}
                     >
                       <div className="flex items-center justify-between mb-1">
@@ -293,7 +296,24 @@ export const SecuritySidebar = ({ activeTab, onTabChange }: SecuritySidebarProps
                         <div className="mt-1 text-sm">
                           <span className="text-gray-400">放行时间：</span>
                           <span className="text-green-600 font-bold">{formatTime(record.releasedAt)}</span>
+                          {record.releaseType && (
+                            <span className="ml-2 text-xs text-gray-400">
+                              ({record.releaseType === 'direct' ? '直接核验' : '主管复核后'})
+                            </span>
+                          )}
                         </div>
+                      )}
+                      {record.disposalRecordId && onViewTimeline && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onViewTimeline(record.disposalRecordId!);
+                          }}
+                          className="mt-2 flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-semibold transition-colors"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          查看处置追踪
+                        </button>
                       )}
                       {record.result === 'failed' && drivers.find(d => d.id === record.driverId)?.status !== 'suspended' && (
                         <button

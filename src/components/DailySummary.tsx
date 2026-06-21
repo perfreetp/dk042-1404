@@ -16,7 +16,7 @@ interface DailySummaryProps {
 type GroupBy = 'route' | 'plate';
 
 export const DailySummary = ({ onBack }: DailySummaryProps) => {
-  const { records, alerts, exportTodayLedger, drivers } = useAppStore();
+  const { records, alerts, exportTodayLedger, drivers, shiftHandoverRecords, getPendingItems } = useAppStore();
   const { speak } = useSpeech();
   const [groupBy, setGroupBy] = useState<GroupBy>('route');
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
@@ -386,6 +386,102 @@ export const DailySummary = ({ onBack }: DailySummaryProps) => {
             })}
           </div>
         )}
+      </div>
+
+      <div className="border-t-2 border-gray-200 mt-6 pt-6">
+        <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <UserCheck className="w-6 h-6 text-purple-600" />
+          交接班核对区
+        </h3>
+        <div className="grid grid-cols-4 gap-4">
+          {(() => {
+            const { pendingVerify, pendingReview, suspended } = getPendingItems();
+            const lastHandover = shiftHandoverRecords
+              .filter(r => new Date(r.handoverTime).toDateString() === new Date().toDateString())
+              .sort((a, b) => b.handoverTime - a.handoverTime)[0];
+
+            return (
+              <>
+                <div className={cn(
+                'rounded-xl p-4 border-2',
+                pendingVerify.length > 0 ? 'bg-gray-50 border-gray-200' : 'bg-blue-50 border-blue-200'
+              )}>
+                <div className="flex items-center gap-2 mb-2">
+                  <Clock className={cn('w-5 h-5', pendingVerify.length > 0 ? 'text-blue-500' : 'text-gray-400')} />
+                  <h4 className="font-bold text-gray-700">待核验放行</h4>
+                </div>
+                <p className={cn('text-3xl font-bold mb-1', pendingVerify.length > 0 ? 'text-blue-600' : 'text-gray-400')}>
+                  {pendingVerify.length}
+                </p>
+                {pendingVerify.length > 0 && (
+                  <div className="text-xs text-blue-600 font-mono">
+                    {pendingVerify.slice(0, 2).map(r => r.passCode).join('、')}
+                    {pendingVerify.length > 2 && ` 等${pendingVerify.length}个`}
+                  </div>
+                )}
+              </div>
+
+              <div className={cn(
+                'rounded-xl p-4 border-2',
+                pendingReview.length > 0 ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-200'
+              )}>
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className={cn('w-5 h-5', pendingReview.length > 0 ? 'text-orange-500' : 'text-gray-400')} />
+                  <h4 className="font-bold text-gray-700">待主管处理</h4>
+                </div>
+                <p className={cn('text-3xl font-bold mb-1', pendingReview.length > 0 ? 'text-orange-600' : 'text-gray-400')}>
+                  {pendingReview.length}
+                </p>
+                {pendingReview.length > 0 && (
+                  <div className="text-xs text-orange-600">
+                    {pendingReview.slice(0, 2).map(r => r.driverName).join('、')}
+                    {pendingReview.length > 2 && ` 等${pendingReview.length}人`}
+                  </div>
+                )}
+              </div>
+
+              <div className={cn(
+                'rounded-xl p-4 border-2',
+                suspended.length > 0 ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'
+              )}>
+                <div className="flex items-center gap-2 mb-2">
+                  <Shield className={cn('w-5 h-5', suspended.length > 0 ? 'text-red-500 animate-pulse' : 'text-gray-400')} />
+                  <h4 className="font-bold text-gray-700">禁岗拦停</h4>
+                </div>
+                <p className={cn('text-3xl font-bold mb-1', suspended.length > 0 ? 'text-red-600' : 'text-gray-400')}>
+                  {suspended.length}
+                </p>
+                {suspended.length > 0 && (
+                  <div className="text-xs text-red-600">
+                    {suspended.slice(0, 2).map(d => d.name).join('、')}
+                    {suspended.length > 2 && ` 等${suspended.length}人`}
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-purple-50 rounded-xl p-4 border-2 border-purple-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <UserCheck className="w-5 h-5 text-purple-500" />
+                  <h4 className="font-bold text-gray-700">交接备注</h4>
+                </div>
+                {lastHandover ? (
+                  <>
+                    <p className="text-sm text-purple-700 mb-1">
+                      <span className="font-bold">{lastHandover.outgoingGuard}</span>
+                      {' → '}
+                      <span className="font-bold">{lastHandover.incomingGuard}</span>
+                    </p>
+                    <p className="text-xs text-purple-600 line-clamp-2">{lastHandover.handoverNote}</p>
+                    <p className="text-xs text-purple-400 mt-1">{formatTime(lastHandover.handoverTime)}</p>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-400">今日暂无交接</p>
+                )}
+              </div>
+              </>
+            );
+          })()}
+        </div>
       </div>
     </div>
   );

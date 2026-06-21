@@ -21,6 +21,7 @@ export interface TestRecord {
   passCode?: string;
   released: boolean;
   releasedAt?: number;
+  releaseType?: 'direct' | 'review';
   reviewConclusion?: 'cleared' | 'suspended';
   disposalRecordId?: string;
 }
@@ -92,6 +93,14 @@ export interface DisposalRecord {
   executedAt?: number;
 }
 
+export interface TimelineEvent {
+  type: 'test_failed' | 'alert_created' | 'contacted' | 'reviewed' | 'executed';
+  timestamp: number;
+  title: string;
+  description?: string;
+  operator?: string;
+}
+
 export interface AppState {
   drivers: Driver[];
   currentDriver: Driver | null;
@@ -129,4 +138,5 @@ export interface AppActions {
   };
   markDisposalExecuted: (disposalId: string) => void;
   parseQrContent: (content: string) => { passCode?: string; driverName?: string; busPlate?: string; error?: string };
+  getDisposalTimeline: (disposalId: string) => TimelineEvent[];
 }

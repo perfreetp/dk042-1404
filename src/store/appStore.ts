@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import {
   Driver, TestRecord, TestStep, AlertRecord, AlertStatus,
   AppState, AppActions, CardScanResult, ReviewConclusion,
-  ShiftHandoverRecord, DisposalRecord, ShiftType,
+  ShiftHandoverRecord, DisposalRecord, ShiftType, TimelineEvent,
 } from '../types';
 import { mockDrivers } from '../data/mockData';
 import {
@@ -10,6 +10,7 @@ import {
   loadShiftHandover, saveShiftHandover,
   loadDisposalRecords, saveDisposalRecords,
   loadCurrentShift, saveCurrentShift,
+  loadDrivers, saveDrivers,
 } from '../utils/storage';
 import { exportRecordsToCSV, downloadCSV } from '../utils/exportCsv';
 
@@ -34,9 +35,16 @@ const persistRecords = (records: TestRecord[]) => saveRecords(records);
 const persistAlerts = (alerts: AlertRecord[]) => saveAlerts(alerts);
 const persistShiftHandover = (r: ShiftHandoverRecord[]) => saveShiftHandover(r);
 const persistDisposalRecords = (r: DisposalRecord[]) => saveDisposalRecords(r);
+const persistDrivers = (d: Driver[]) => saveDrivers(d);
+
+const initDrivers = (): Driver[] => {
+  const saved = loadDrivers();
+  if (saved && saved.length > 0) return saved;
+  return mockDrivers;
+};
 
 export const useAppStore = create<AppStore>((set, get) => ({
-  drivers: mockDrivers,
+  drivers: initDrivers(),
   currentDriver: null,
   testStep: 'idle' as TestStep,
   testResult: null,
@@ -298,10 +306,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
         ? { ...d, status: conclusion === 'cleared' ? ('waiting' as const) : ('suspended' as const) }
         : d
     );
+    persistDrivers(updatedDrivers);
 
     const updatedRecords = records.map(r =>
       r.driverId === alert.driverId && isSameDay(r.timestamp, now)
-        ? { ...r, reviewConclusion: conclusion, disposalRecordId }
+        ? { ...r, reviewConclusion: conclusion, disposalRecordId: disposalId }
         : r
     );
     persistRecords(updatedRecords);
@@ -327,7 +336,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const { records } = get();
     const now = Date.now();
     const updatedRecords = records.map(r =>
-      r.id === recordId ? { ...r, released: true, releasedAt: now } : r
+      r.id === recordId ? { ...r, released: true, releasedAt: now, releaseType: 'direct' as const } : r
     );
     persistRecords(updatedRecords);
     set({ records: updatedRecords });
@@ -442,7 +451,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       );
       if (targetRecord) {
         updatedRecords = records.map(r =>
-          r.id === targetRecord.id ? { ...r, released: true, releasedAt: now } : r
+          r.id === targetRecord.id ? { ...r, released: true, releasedAt: now, releaseType: 'review' as const } : r
         );
         persistRecords(updatedRecords);
       }
@@ -475,5 +484,69 @@ export const useAppStore = create<AppStore>((set, get) => ({
       }
       return { error: '二维码内容格式不正确' };
     }
+  },
+
+  getDisposalTimeline: (disposalId: string) => {
+    const { disposalRecords, alerts, records } = get();
+    const disposal = disposalRecords.find(d => d.id === disposalId);
+    if (!disposal) return [];
+
+    const alert = alerts.find(a => a.id === disposal.alertId);
+    if (!alert) return [];
+
+    const testRecord = records.find(r =>
+      r.driverId === disposal.driverId &&
+      r.result === 'failed' &&
+      isSameDay(r.timestamp, disposal.createdAt)
+    );
+
+    const events: TimelineEvent[] = [];
+
+    if (testRecord) {
+      events.push({
+        type: 'test_failed',
+        timestamp: testRecord.timestamp,
+        title: '酒测检测不合格',
+        description: `酒精含量 ${testRecord.alcoholLevel?.toFixed(1)} mg/100ml`,
+        operator: '检测终端',
+      });
+    }
+
+    events.push({
+      type: 'alert_created',
+      timestamp: alert.timestamp,
+      title: '生成告警记录',
+      description: '系统自动推送至安全主管',
+      operator: '系统',
+    });
+
+    if (alert.contactedAt && alert.contactNote) {
+      events.push({
+        type: 'contacted',
+        timestamp: alert.contactedAt,
+        title: '主管已联系',
+        description: alert.contactNote,
+        operator: '安全主管',
+      });
+    }
+
+    events.push({
+      type: 'reviewed',
+      timestamp: disposal.createdAt,
+      title: disposal.conclusion === 'cleared' ? '复核通过' : '禁止上岗',
+      description: alert.reviewNote,
+      operator: '安全主管',
+    });
+
+    if (disposal.executed && disposal.executedAt) {
+      events.push({
+        type: 'executed',
+        timestamp: disposal.executedAt,
+        title: disposal.conclusion === 'cleared' ? '保安确认已放行' : '保安确认已拦停',
+        operator: '门岗保安',
+      });
+    }
+
+    return events.sort((a, b) => a.timestamp - b.timestamp);
   },
 }));

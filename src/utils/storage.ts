@@ -1,10 +1,11 @@
-import { TestRecord, AlertRecord, ShiftHandoverRecord, DisposalRecord, ShiftType } from '../types';
+import { TestRecord, AlertRecord, ShiftHandoverRecord, DisposalRecord, ShiftType, Driver } from '../types';
 
 const RECORDS_KEY = 'alcohol_test_records';
 const ALERTS_KEY = 'alcohol_test_alerts';
 const SHIFT_HANDOVER_KEY = 'alcohol_test_shift_handover';
 const DISPOSAL_RECORDS_KEY = 'alcohol_test_disposal_records';
 const CURRENT_SHIFT_KEY = 'alcohol_test_current_shift';
+const DRIVERS_KEY = 'alcohol_test_drivers';
 
 export const saveRecords = (records: TestRecord[]): void => {
   try {
@@ -100,6 +101,24 @@ export const loadCurrentShift = (): ShiftType | null => {
   return null;
 };
 
+export const saveDrivers = (drivers: Driver[]): void => {
+  try {
+    localStorage.setItem(DRIVERS_KEY, JSON.stringify(drivers));
+  } catch (e) {
+    console.error('保存司机状态失败:', e);
+  }
+};
+
+export const loadDrivers = (): Driver[] | null => {
+  try {
+    const data = localStorage.getItem(DRIVERS_KEY);
+    if (data) return JSON.parse(data);
+  } catch (e) {
+    console.error('加载司机状态失败:', e);
+  }
+  return null;
+};
+
 export const clearAll = (): void => {
   try {
     localStorage.removeItem(RECORDS_KEY);
@@ -107,6 +126,7 @@ export const clearAll = (): void => {
     localStorage.removeItem(SHIFT_HANDOVER_KEY);
     localStorage.removeItem(DISPOSAL_RECORDS_KEY);
     localStorage.removeItem(CURRENT_SHIFT_KEY);
+    localStorage.removeItem(DRIVERS_KEY);
   } catch (e) {
     console.error('清除数据失败:', e);
   }
